@@ -78,80 +78,57 @@ class EpubParser @Inject constructor(
             processedResources: MutableSet<String>
         ) {
             for (tocItem in tocItems) {
-                Log.d("EpubParser", "📄 Обработка элемента оглавления: ${tocItem.title}")
-
                 val resource = tocItem.resource
-                if (resource != null) {
-                    Log.d("EpubParser", "   📦 Ресурс найден: ${resource.id}, href: ${resource.href}")
+                if (resource != null && resource.id !in processedResources) {
+                    processedResources.add(resource.id)
 
-                    if (resource.id !in processedResources) {
-                        processedResources.add(resource.id)
+                    try {
+                        // Получаем содержимое ресурса
+                        val htmlContent = String(resource.data, Charsets.UTF_8)
 
-                        try {
-                            // Получаем содержимое ресурса
-                            val htmlContent = String(resource.data, Charsets.UTF_8)
-                            Log.d("EpubParser", "   📝 Длина HTML: ${htmlContent.length} символов")
+                        // Проверяем тип ресурса
+                        val mediaType = resource.mediaType?.toString()?.lowercase() ?: ""
 
-                            // Проверяем тип ресурса
-                            val mediaType = resource.mediaType?.toString() ?: "unknown"
-                            Log.d("EpubParser", "   🏷️ Media type: $mediaType")
+                        // Проверяем, является ли это реальной главой с текстом
+                        if (shouldProcessAsChapter(resource, tocItem.title ?: "", htmlContent)) {
+                            chapterCounter[0]++
 
-                            // Проверяем, является ли это HTML-ресурсом
-                            if (mediaType.contains("html", ignoreCase = true) ||
-                                mediaType.contains("xhtml", ignoreCase = true) ||
-                                resource.href.endsWith(".html", ignoreCase = true) ||
-                                resource.href.endsWith(".xhtml", ignoreCase = true)) {
+                            Log.d("EpubParser", "📖 Обработка главы ${chapterCounter[0]}: ${tocItem.title}")
 
-                                chapterCounter[0]++
+                            // Извлекаем текст с очисткой от дублирующихся заголовков
+                            val (cleanText, filteredTitle) = extractAndCleanText(
+                                html = htmlContent,
+                                chapterTitle = tocItem.title ?: "Глава ${chapterCounter[0]}",
+                                resourceId = resource.id
+                            )
 
-                                Log.d("EpubParser", "   🔍 Извлечение текста...")
+                            val wordCount = cleanText.split("\\s+".toRegex()).size
 
-                                // Простейший способ извлечь текст
-                                val text = extractTextSimple(htmlContent)
-
-                                Log.d("EpubParser", "   📊 Извлечено символов: ${text.length}")
-
-                                if (text.isNotBlank()) {
-                                    chapters.add(
-                                        EpubChapter(
-                                            id = resource.id,
-                                            title = tocItem.title ?: "Глава ${chapterCounter[0]}",
-                                            content = text,
-                                            rawHtml = htmlContent,
-                                            chapterNumber = chapterCounter[0],
-                                            wordCount = text.split("\\s+".toRegex()).size
-                                        )
+                            // Добавляем главу только если есть текст и это не обложка
+                            if (cleanText.isNotBlank() && !isCoverOrMetadata(filteredTitle)) {
+                                chapters.add(
+                                    EpubChapter(
+                                        id = resource.id,
+                                        title = filteredTitle,
+                                        content = cleanText,
+                                        rawHtml = htmlContent,
+                                        chapterNumber = chapterCounter[0],
+                                        wordCount = wordCount
                                     )
-                                    Log.d("EpubParser", "   ✅ Глава добавлена: ${tocItem.title}")
-                                } else {
-                                    Log.w("EpubParser", "   ⚠️ Текст пустой, но глава добавлена")
-                                    chapters.add(
-                                        EpubChapter(
-                                            id = resource.id,
-                                            title = tocItem.title ?: "Глава ${chapterCounter[0]}",
-                                            content = "Текст главы не найден или пуст",
-                                            rawHtml = htmlContent,
-                                            chapterNumber = chapterCounter[0],
-                                            wordCount = 0
-                                        )
-                                    )
-                                }
+                                )
+                                Log.d("EpubParser", "✅ Добавлена глава '$filteredTitle' с $wordCount словами")
                             } else {
-                                Log.d("EpubParser", "   ⏭️ Пропущен не-HTML ресурс: $mediaType")
+                                Log.w("EpubParser", "⚠️ Пропущена глава '${tocItem.title}' - мало текста или обложка")
+                                chapterCounter[0]-- // Уменьшаем счетчик, так как главу не добавили
                             }
-                        } catch (e: Exception) {
-                            Log.e("EpubParser", "   ❌ Ошибка обработки ресурса ${resource.id}: ${e.message}")
                         }
-                    } else {
-                        Log.d("EpubParser", "   🔄 Ресурс уже обработан: ${resource.id}")
+                    } catch (e: Exception) {
+                        Log.e("EpubParser", "❌ Ошибка обработки ресурса: ${e.message}")
                     }
-                } else {
-                    Log.w("EpubParser", "   ❌ У элемента нет ресурса: ${tocItem.title}")
                 }
 
                 // Обрабатываем вложенные элементы
                 if (tocItem.children.isNotEmpty()) {
-                    Log.d("EpubParser", "   📂 Вложенные элементы: ${tocItem.children.size}")
                     processTocItems(tocItem.children, chapterCounter, processedResources)
                 }
             }
@@ -161,89 +138,151 @@ class EpubParser @Inject constructor(
         val processedResources = mutableSetOf<String>()
         processTocItems(tableOfContents.tocReferences, chapterCounter, processedResources)
 
-        Log.d("EpubParser", "🎉 Извлечено глав: ${chapters.size}")
-
-        // Если глав нет, попробуем получить все HTML ресурсы
-        if (chapters.isEmpty()) {
-            Log.d("EpubParser", "⚠️ Главы не найдены через оглавление, пробуем все ресурсы...")
-            extractAllHtmlResources(book, chapters)
+        // Если главы найдены, фильтруем пустые и ненужные
+        val filteredChapters = chapters.filter {
+                chapter ->
+            chapter.content.isNotBlank() &&
+                    !isCoverOrMetadata(chapter.title) &&
+                    chapter.content.length > 50
         }
 
-        return chapters
-    }
-
-    private fun extractAllHtmlResources(book: Book, chapters: MutableList<EpubChapter>) {
-        val resources = book.resources.all
-        Log.d("EpubParser", "🔍 Поиск HTML ресурсов среди всех ${resources.size} ресурсов")
-
-        var chapterNumber = 1
-
-        for (resource in resources) {
-            val mediaType = resource.mediaType?.toString() ?: "unknown"
-            val href = resource.href
-
-            if (mediaType.contains("html", ignoreCase = true) ||
-                mediaType.contains("xhtml", ignoreCase = true) ||
-                href.endsWith(".html", ignoreCase = true) ||
-                href.endsWith(".xhtml", ignoreCase = true)) {
-
-                Log.d("EpubParser", "   📄 Найден HTML ресурс: $href, type: $mediaType")
-
-                try {
-                    val htmlContent = String(resource.data, Charsets.UTF_8)
-                    val text = extractTextSimple(htmlContent)
-
-                    if (text.isNotBlank()) {
-                        // Пробуем извлечь заголовок из HTML
-                        val title = extractTitleFromHtml(htmlContent) ?: "Глава $chapterNumber"
-
-                        chapters.add(
-                            EpubChapter(
-                                id = resource.id,
-                                title = title,
-                                content = text,
-                                rawHtml = htmlContent,
-                                chapterNumber = chapterNumber,
-                                wordCount = text.split("\\s+".toRegex()).size
-                            )
-                        )
-                        Log.d("EpubParser", "   ✅ Добавлена глава: $title")
-                        chapterNumber++
-                    }
-                } catch (e: Exception) {
-                    Log.e("EpubParser", "   ❌ Ошибка обработки ресурса $href: ${e.message}")
-                }
-            }
+        // Перенумеруем главы после фильтрации
+        val finalChapters = filteredChapters.mapIndexed { index, chapter ->
+            chapter.copy(chapterNumber = index + 1)
         }
+
+        Log.d("EpubParser", "🎉 Извлечено глав: ${finalChapters.size}")
+        return finalChapters
     }
 
-    private fun extractTextSimple(html: String): String {
+    private fun shouldProcessAsChapter(resource: Resource, title: String, htmlContent: String): Boolean {
+        // Проверяем media type
+        val mediaType = resource.mediaType?.toString()?.lowercase() ?: ""
+        return mediaType.contains("html") || mediaType.contains("xhtml") ||
+                resource.href.endsWith(".html", ignoreCase = true) ||
+                resource.href.endsWith(".xhtml", ignoreCase = true)
+    }
+
+    private fun isCoverOrMetadata(title: String): Boolean {
+        val lowerTitle = title.lowercase()
+        return lowerTitle.contains("cover") ||
+                lowerTitle.contains("обложка") ||
+                lowerTitle.contains("титул") ||
+                lowerTitle.contains("title") ||
+                lowerTitle.contains("copyright") ||
+                lowerTitle.contains("авторские права") ||
+                lowerTitle.matches(Regex("^\\d+.*$")) // Начинается с цифр (номера страниц)
+    }
+
+    private fun extractAndCleanText(
+        html: String,
+        chapterTitle: String,
+        resourceId: String
+    ): Pair<String, String> {
         return try {
             val doc = Jsoup.parse(html)
 
-            // Самый простой способ - весь текст из body
-            val text = doc.body().text()
+            // Удаляем скрипты и стили
+            doc.select("script, style, meta, link").remove()
 
-            // Базовая очистка
+            // Находим основной контент
+            val body = doc.body()
+
+            // Получаем весь текст
+            val fullText = body.text().trim()
+
+            // Извлекаем заголовок из текста (если есть)
+            val extractedTitle = extractTitleFromText(fullText, chapterTitle)
+
+            // Очищаем текст от дублирующегося заголовка
+            val cleanText = removeDuplicateTitle(fullText, extractedTitle)
+
+            Pair(cleanText, extractedTitle)
+
+        } catch (e: Exception) {
+            Log.e("EpubParser", "❌ Ошибка при обработке HTML: ${e.message}")
+            // Fallback
+            Pair(htmlToPlainText(html), chapterTitle)
+        }
+    }
+
+    private fun extractTitleFromText(text: String, fallbackTitle: String): String {
+        // Пытаемся извлечь заголовок из первых строк текста
+        val lines = text.split("\n").take(3).map { it.trim() }
+
+        for (line in lines) {
+            if (line.isNotBlank() && line.length > 10 && line.length < 100) {
+                // Проверяем, что строка похожа на заголовок
+                if (!line.matches(Regex(".*\\d+/\\d+.*")) && // Не содержит номеров страниц
+                    !line.matches(Regex(".*\\d{1,2}:\\d{2}.*")) && // Не содержит время
+                    !line.matches(Regex("^[\\s\\d.:-]+$"))) { // Не только цифры и символы
+                    return line
+                }
+            }
+        }
+
+        return fallbackTitle
+    }
+
+    private fun removeDuplicateTitle(text: String, title: String): String {
+        var result = text
+
+        // Удаляем заголовок из начала текста
+        if (title.isNotBlank()) {
+            // Удаляем точное совпадение в начале
+            if (result.startsWith(title)) {
+                result = result.substring(title.length).trimStart()
+            }
+
+            // Удаляем с разными окончаниями (точка, двоеточие, тире)
+            val patterns = listOf(
+                "$title.",
+                "$title:",
+                "$title -",
+                "$title —",
+                "$title\n"
+            )
+
+            for (pattern in patterns) {
+                if (result.startsWith(pattern)) {
+                    result = result.substring(pattern.length).trimStart()
+                }
+            }
+
+            // Удаляем из первых строк, если встречается
+            val lines = result.split("\n").toMutableList()
+            if (lines.isNotEmpty() && lines[0].contains(title)) {
+                lines.removeAt(0)
+                result = lines.joinToString("\n")
+            }
+        }
+
+        // Удаляем номера страниц (34/577)
+        result = result.replace(Regex("\\d+/\\d+"), "")
+
+        // Удаляем временные метки (12:30)
+        result = result.replace(Regex("\\d{1,2}:\\d{2}"), "")
+
+        // Удаляем лишние пробелы и пустые строки
+        result = result.replace(Regex("\\s+"), " ")
+            .replace(Regex("\\n\\s*\\n+"), "\n\n")
+            .trim()
+
+        return result
+    }
+
+    private fun htmlToPlainText(html: String): String {
+        return try {
+            val doc = Jsoup.parse(html)
+            doc.select("script, style").remove()
+            val text = doc.body().text()
             text.replace(Regex("\\s+"), " ")
                 .replace(Regex("\\n\\s*\\n"), "\n\n")
                 .trim()
         } catch (e: Exception) {
-            Log.e("EpubParser", "Ошибка JSoup: ${e.message}")
-            // Fallback: удаляем теги
             html.replace(Regex("<[^>]*>"), " ")
                 .replace(Regex("\\s+"), " ")
                 .trim()
-        }
-    }
-
-    private fun extractTitleFromHtml(html: String): String? {
-        return try {
-            val doc = Jsoup.parse(html)
-            // Ищем заголовок
-            doc.selectFirst("h1, h2, h3, .title, .chapter-title")?.text()?.trim()
-        } catch (e: Exception) {
-            null
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,34 +26,120 @@ fun ReadingScreen(
     bookId: Long,
     viewModel: ReadingViewModel = hiltViewModel()
 ) {
+    // Состояние загрузки
+    var isLoading by remember { mutableStateOf(true) }
+    var showEmptyState by remember { mutableStateOf(false) }
+
+    // Инициализируем ViewModel с bookId
     LaunchedEffect(bookId) {
         viewModel.setBookId(bookId)
+        isLoading = true
+        showEmptyState = false
     }
 
     val chapters by viewModel.chapters.collectAsState()
     val currentChapterIndex by viewModel.currentChapter.collectAsState()
     val readingProgress by viewModel.readingProgress.collectAsState()
 
+    // Получаем текущую главу
     val currentChapter = remember(chapters, currentChapterIndex) {
         chapters.getOrNull(currentChapterIndex - 1)
     }
 
-    val chapterContent = remember(currentChapter) {
-        val content = currentChapter?.content ?: ""
+    // Когда главы загрузились
+    LaunchedEffect(chapters) {
+        if (chapters.isNotEmpty()) {
+            isLoading = false
+            showEmptyState = chapters.all { it.content.isBlank() }
+        } else if (!isLoading) {
+            showEmptyState = true
+        }
+    }
+
+    // Показать состояние загрузки
+    if (isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Загрузка книги...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    // Показать пустое состояние
+    if (showEmptyState || chapters.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MenuBook,
+                    contentDescription = "Книга",
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Книга не найдена или повреждена",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Попробуйте переимпортировать книгу",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = { navController.popBackStack() }) {
+                    Text(text = "Вернуться к библиотеке")
+                }
+            }
+        }
+        return
+    }
+
+    // Проверить, что текущая глава существует и имеет контент
+    val validChapter = if (currentChapter == null || currentChapter.content.isBlank()) {
+        // Найти первую главу с контентом
+        chapters.firstOrNull { it.content.isNotBlank() } ?: chapters.firstOrNull()
+    } else {
+        currentChapter
+    }
+
+    val chapterContent = remember(validChapter) {
+        val content = validChapter?.content ?: ""
         if (content.isEmpty()) {
-            listOf(
-                "❌ Текст главы не найден.",
-                "📖 Заголовок: ${currentChapter?.title ?: "Неизвестно"}",
-                "🔢 Номер главы: $currentChapterIndex",
-                "📊 Всего глав: ${chapters.size}",
-                "💾 Длина текста в БД: ${currentChapter?.content?.length ?: 0} символов",
-                "",
-                "🔄 Пожалуйста, переимпортируйте книгу с обновленным парсером.",
-                "👉 Или попробуйте перейти к следующей главе."
-            )
+            emptyList()
         } else {
-            // Просто разбиваем на абзацы без фильтрации
-            content.split("\n\n", "\n").filter { it.trim().isNotBlank() }
+            // Разбиваем на абзацы, фильтруем короткие строки
+            content.split("\n\n", "\n")
+                .map { it.trim() }
+                .filter { it.isNotBlank() && it.length > 3 }
+                .filterNot { it.matches(Regex("^[\\d\\s.:/-]+$")) } // Фильтруем номера страниц
         }
     }
 
@@ -61,7 +148,7 @@ fun ReadingScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = currentChapter?.title ?: "Загрузка...",
+                        text = validChapter?.title ?: "Без названия",
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -73,6 +160,7 @@ fun ReadingScreen(
                     }
                 },
                 actions = {
+                    // Индикатор прогресса
                     Text(
                         text = "${(readingProgress * 100).toInt()}%",
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -94,6 +182,7 @@ fun ReadingScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущая глава")
                     }
 
+                    // Навигация по главам
                     Text(
                         text = "$currentChapterIndex/${chapters.size}",
                         style = MaterialTheme.typography.bodyMedium
@@ -115,35 +204,45 @@ fun ReadingScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.surface)
         ) {
-            // Отладочная информация
-            if (currentChapter?.content.isNullOrEmpty()) {
-                Text(
-                    text = "⚠️ Отладка: Глава ${currentChapterIndex}/${chapters.size}",
+            if (chapterContent.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Текст главы пуст",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Попробуйте перейти к следующей главе",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.errorContainer)
-                        .padding(8.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    fontSize = 12.sp
-                )
-            }
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                items(chapterContent) { paragraph ->
-                    Text(
-                        text = paragraph,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            lineHeight = 24.sp,
-                            fontSize = 16.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    items(chapterContent) { paragraph ->
+                        Text(
+                            text = paragraph,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                lineHeight = 24.sp,
+                                fontSize = 16.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }
