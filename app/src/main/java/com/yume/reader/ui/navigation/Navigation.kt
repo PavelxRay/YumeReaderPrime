@@ -14,6 +14,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.yume.reader.ui.screens.FavoritesScreen
+import com.yume.reader.ui.screens.ImportEpubScreen
 import com.yume.reader.ui.screens.LibraryScreen
 import com.yume.reader.ui.screens.ProfileScreen
 import com.yume.reader.ui.screens.ReadingNowScreen
@@ -85,6 +86,11 @@ fun YumeReaderNavigation() {
 
             composable("add_book") {
                 // AddBookScreen(navController = navController)
+            }
+
+            // ui/navigation/YumeReaderNavigation.kt (добавьте маршрут)
+            composable("import_epub") {
+                ImportEpubScreen(navController = navController)
             }
         }
     }

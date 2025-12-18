@@ -1,13 +1,21 @@
 package com.yume.reader.data.repository
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import com.yume.reader.data.local.dao.BookDao
 import com.yume.reader.data.local.dao.ChapterDao
 import com.yume.reader.data.local.entity.BookEntity
 import com.yume.reader.data.local.entity.ChapterEntity
+import com.yume.reader.domain.models.epub.EpubBook
+import com.yume.reader.data.epub.EpubParser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,7 +23,8 @@ import javax.inject.Singleton
 @Singleton
 class BookRepository @Inject constructor(
     private val bookDao: BookDao,
-    private val chapterDao: ChapterDao
+    private val chapterDao: ChapterDao,
+    val context: Context
 ) {
 
     fun getAllBooks(): Flow<List<BookEntity>> = bookDao.getAllBooks()
@@ -190,4 +199,194 @@ class BookRepository @Inject constructor(
     fun getTotalPagesRead(): Flow<Int?> = bookDao.getTotalPagesRead()
 
     fun getReadingBooksCount(): Flow<Int> = bookDao.getReadingBooksCount()
+
+    // EPUB-специфичные методы
+    suspend fun importEpubBook(epubBook: EpubBook): Long {
+        Log.d("BookRepository", "Импортируем EPUB: ${epubBook.title}")
+
+        return withContext(Dispatchers.IO) {
+            try {
+                // Сохраняем обложку
+                val coverPath = epubBook.coverImage?.let {
+                    saveCoverImage(it, epubBook.title)
+                }
+
+                // Создаем сущность книги
+                val bookEntity = BookEntity(
+                    title = epubBook.title,
+                    author = epubBook.author,
+                    coverUrl = coverPath,
+                    description = epubBook.description,
+                    totalPages = epubBook.metadata.totalPages,
+                    filePath = epubBook.filePath,
+                    fileFormat = "epub",
+                    addedDate = Date(),
+                    currentPage = 0,
+                    progress = 0,
+                    isReading = true // Автоматически начинаем читать
+                )
+
+                // Сохраняем книгу в базу
+                val bookId = bookDao.insertBook(bookEntity)
+                Log.d("BookRepository", "Книга сохранена с ID: $bookId")
+
+                // Сохраняем главы
+                epubBook.chapters.forEachIndexed { index, epubChapter ->
+                    val chapterEntity = ChapterEntity(
+                        bookId = bookId,
+                        chapterNumber = epubChapter.chapterNumber,
+                        title = epubChapter.title,
+                        content = epubChapter.content,
+                        wordCount = epubChapter.wordCount,
+                        durationMinutes = calculateReadingTime(epubChapter.wordCount)
+                    )
+                    chapterDao.insertChapter(chapterEntity)
+                }
+
+                Log.d("BookRepository", "Добавлено ${epubBook.chapters.size} глав")
+                bookId
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка импорта EPUB: ${e.message}", e)
+                throw e // Пробрасываем исключение дальше
+            }
+        }
+    }
+
+    private fun saveCoverImage(imageData: ByteArray, bookTitle: String): String {
+        return try {
+            val fileName = "cover_${System.currentTimeMillis()}_${bookTitle.hashCode()}.jpg"
+            val coversDir = File(context.filesDir, "covers")
+            coversDir.mkdirs() // Создаем папку, если не существует
+
+            val coverFile = File(coversDir, fileName)
+
+            // Конвертируем ByteArray в Bitmap
+            val bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.size)
+                ?: throw IllegalStateException("Не удалось декодировать обложку")
+
+            // Сохраняем сжатое изображение
+            coverFile.outputStream().use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, output)
+            }
+
+            coverFile.absolutePath
+        } catch (e: Exception) {
+            Log.e("BookRepository", "Ошибка сохранения обложки: ${e.message}")
+            "" // Возвращаем пустую строку вместо null
+        }
+    }
+
+    private fun calculateReadingTime(wordCount: Int): Int {
+        // Средняя скорость чтения: 150-200 слов в минуту
+        // Используем 180 как среднее значение
+        return if (wordCount > 0) {
+            maxOf(1, (wordCount / 180.0).toInt())
+        } else {
+            1 // Минимальное время для пустых глав
+        }
+    }
+
+    suspend fun scanForEpubFiles(directoryPath: String): List<File> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val directory = File(directoryPath)
+                if (!directory.exists() || !directory.isDirectory) {
+                    return@withContext emptyList()
+                }
+
+                directory.listFiles { file ->
+                    file.isFile && file.extension.equals("epub", ignoreCase = true)
+                }?.toList() ?: emptyList()
+            } catch (e: SecurityException) {
+                Log.e("BookRepository", "Нет доступа к папке: ${e.message}")
+                emptyList()
+            }
+        }
+    }
+
+    // Метод для проверки существования книги по пути
+    suspend fun doesBookExist(filePath: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Простой способ - проверка в базе данных
+                // В будущем можно добавить поле filePath в BookEntity для проверки
+                val allBooks = bookDao.getAllBooks().firstOrNull() ?: emptyList()
+                allBooks.any { it.filePath == filePath }
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка проверки книги: ${e.message}")
+                false
+            }
+        }
+    }
+
+    // Метод для удаления импортированной книги
+    suspend fun deleteImportedBook(bookId: Long) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Удаляем обложку, если есть
+                val book = bookDao.getBookById(bookId)
+                book?.coverUrl?.takeIf { it.isNotEmpty() }?.let { coverPath ->
+                    File(coverPath).delete()
+                }
+
+                // Удаляем книгу из базы (каскадно удалятся главы)
+                book?.let { bookDao.deleteBook(it) }
+
+                Log.d("BookRepository", "Удалена книга с ID: $bookId")
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка удаления книги: ${e.message}")
+            }
+        }
+    }
+
+    // Дополнительные методы для BookRepository.kt
+
+    // Получение информации об EPUB без импорта
+    suspend fun getEpubBookInfo(filePath: String): EpubBook? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val inputStream = File(filePath).inputStream()
+                val epubParser = EpubParser(context)
+                epubParser.parseEpub(inputStream, filePath)
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка чтения EPUB: ${e.message}")
+                null
+            }
+        }
+    }
+
+    // Пакетный импорт нескольких EPUB
+    suspend fun importMultipleEpubBooks(epubBooks: List<EpubBook>): List<Long> {
+        return epubBooks.mapNotNull { epubBook ->
+            try {
+                importEpubBook(epubBook)
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка импорта ${epubBook.title}: ${e.message}")
+                null
+            }
+        }
+    }
+
+    // Обновление прогресса чтения для EPUB
+    suspend fun updateEpubReadingProgress(bookId: Long, chapterNumber: Int, progressPercent: Int) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Получаем книгу и обновляем, если она существует
+                bookDao.getBookById(bookId)?.let { book ->
+                    bookDao.updateReadingProgress(bookId, chapterNumber, progressPercent)
+
+                    // Помечаем главу как прочитанную, если прогресс > 90%
+                    if (progressPercent >= 90) {
+                        chapterDao.getChaptersByBookId(bookId).firstOrNull()?.let { chapters ->
+                            chapters.find { it.chapterNumber == chapterNumber }?.let { chapter ->
+                                chapterDao.updateReadStatus(chapter.id, true)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка обновления прогресса: ${e.message}")
+            }
+        }
+    }
 }

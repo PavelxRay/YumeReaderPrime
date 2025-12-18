@@ -18,9 +18,14 @@ coroutines = "1.7.3"
 lifecycle-runtime-compose = "2.7.0"
 composeCompiler = "1.5.10"
 javapoet = "1.13.0"
+epublib = "3.1"
+jsoup = "1.17.2"
+zip4j = "2.11.5"
+accompanist = "0.32.0"
 
 
 [libraries]
+accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
 javapoet = { group = "com.squareup", name = "javapoet", version.ref = "javapoet" }
 androidx-compose-compiler = { group = "androidx.compose.compiler", name = "compiler", version.ref = "composeCompiler" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,6 +59,14 @@ hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-com
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Epub
+epublib-core = { group = "com.positiondev.epublib", name = "epublib-core", version.ref = "epublib" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+zip4j = { group = "net.lingala.zip4j", name = "zip4j", version.ref = "zip4j" }
+
+# Обратите внимание на формат для AndroidX библиотек
+androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version = "1.0.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

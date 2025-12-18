@@ -78,7 +78,16 @@ dependencies {
     kapt(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
-//    kapt(libs.javapoet)
+    // Epub
+
+    implementation(libs.epublib.core)
+    implementation(libs.jsoup)
+    implementation(libs.androidx.documentfile)
+    implementation(libs.zip4j) {
+        exclude(group = "xmlpull", module = "xmlpull")
+    }
+
+    implementation(libs.accompanist.permissions)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -93,4 +102,9 @@ dependencies {
 // Добавьте для Hilt
 kapt {
     correctErrorTypes = true
+}
+
+// Или более простой вариант
+configurations.configureEach {
+    exclude(group = "xmlpull", module = "xmlpull")
 }

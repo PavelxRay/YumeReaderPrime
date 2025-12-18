@@ -79,8 +79,7 @@ fun LibraryScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    // TODO: Добавить книгу
-                    navController.navigate("add_book")
+                    navController.navigate("import_epub")
                 },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
