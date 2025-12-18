@@ -1,22 +1,18 @@
 package com.yume.reader.data.local.entity
 
 import androidx.room.*
-import androidx.room.ForeignKey.Companion.CASCADE
 
 @Entity(
     tableName = "chapters",
     foreignKeys = [
         ForeignKey(
             entity = BookEntity::class,
-            parentColumns = ["id"],          // Столбец в родительской таблице BookEntity
-            childColumns = ["book_id"],      // Столбец в этой таблице (ChapterEntity)
-            onDelete = CASCADE
+            parentColumns = ["id"],
+            childColumns = ["book_id"],
+            onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [
-        Index(value = ["book_id"]),
-        Index(value = ["book_id", "chapter_number"], unique = true)
-    ]
+    indices = [Index("book_id")]
 )
 data class ChapterEntity(
     @PrimaryKey(autoGenerate = true)
@@ -28,7 +24,10 @@ data class ChapterEntity(
     @ColumnInfo(name = "chapter_number")
     val chapterNumber: Int,
 
+    @ColumnInfo(name = "title")
     val title: String,
+
+    @ColumnInfo(name = "content")
     val content: String,
 
     @ColumnInfo(name = "word_count")
@@ -39,4 +38,22 @@ data class ChapterEntity(
 
     @ColumnInfo(name = "is_read")
     val isRead: Boolean = false
-)
+) {
+    companion object {
+        fun fromEpubChapter(bookId: Long, epubChapter: com.yume.reader.domain.models.epub.EpubChapter): ChapterEntity {
+            return ChapterEntity(
+                bookId = bookId,
+                chapterNumber = epubChapter.chapterNumber,
+                title = epubChapter.title,
+                content = epubChapter.content,
+                wordCount = epubChapter.wordCount,
+                durationMinutes = calculateReadingTime(epubChapter.wordCount),
+                isRead = false
+            )
+        }
+
+        private fun calculateReadingTime(wordCount: Int): Int {
+            return kotlin.math.max(1, (wordCount / 180.0).toInt())
+        }
+    }
+}

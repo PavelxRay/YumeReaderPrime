@@ -2,17 +2,16 @@ package com.yume.reader.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -26,18 +25,46 @@ fun ReadingScreen(
     bookId: Long,
     viewModel: ReadingViewModel = hiltViewModel()
 ) {
+    LaunchedEffect(bookId) {
+        viewModel.setBookId(bookId)
+    }
+
     val chapters by viewModel.chapters.collectAsState()
-    val currentChapterText by viewModel.currentChapterText.collectAsState()
-    val currentChapter by viewModel.currentChapter.collectAsState()
+    val currentChapterIndex by viewModel.currentChapter.collectAsState()
     val readingProgress by viewModel.readingProgress.collectAsState()
+
+    val currentChapter = remember(chapters, currentChapterIndex) {
+        chapters.getOrNull(currentChapterIndex - 1)
+    }
+
+    val chapterContent = remember(currentChapter) {
+        val content = currentChapter?.content ?: ""
+        if (content.isEmpty()) {
+            listOf(
+                "❌ Текст главы не найден.",
+                "📖 Заголовок: ${currentChapter?.title ?: "Неизвестно"}",
+                "🔢 Номер главы: $currentChapterIndex",
+                "📊 Всего глав: ${chapters.size}",
+                "💾 Длина текста в БД: ${currentChapter?.content?.length ?: 0} символов",
+                "",
+                "🔄 Пожалуйста, переимпортируйте книгу с обновленным парсером.",
+                "👉 Или попробуйте перейти к следующей главе."
+            )
+        } else {
+            // Просто разбиваем на абзацы без фильтрации
+            content.split("\n\n", "\n").filter { it.trim().isNotBlank() }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = "Глава $currentChapter",
-                        style = MaterialTheme.typography.titleMedium
+                        text = currentChapter?.title ?: "Загрузка...",
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 navigationIcon = {
@@ -46,7 +73,6 @@ fun ReadingScreen(
                     }
                 },
                 actions = {
-                    // Индикатор прогресса
                     Text(
                         text = "${(readingProgress * 100).toInt()}%",
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -63,20 +89,19 @@ fun ReadingScreen(
                 ) {
                     IconButton(
                         onClick = { viewModel.previousChapter() },
-                        enabled = currentChapter > 1
+                        enabled = currentChapterIndex > 1
                     ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущая глава")
                     }
 
-                    // Навигация по главам
                     Text(
-                        text = "$currentChapter/${chapters.size}",
+                        text = "$currentChapterIndex/${chapters.size}",
                         style = MaterialTheme.typography.bodyMedium
                     )
 
                     IconButton(
                         onClick = { viewModel.nextChapter() },
-                        enabled = currentChapter < chapters.size
+                        enabled = currentChapterIndex < chapters.size
                     ) {
                         Icon(Icons.Default.ArrowForward, contentDescription = "Следующая глава")
                     }
@@ -90,19 +115,37 @@ fun ReadingScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.surface)
         ) {
-            // Текст главы
-            Text(
-                text = currentChapterText,
+            // Отладочная информация
+            if (currentChapter?.content.isNullOrEmpty()) {
+                Text(
+                    text = "⚠️ Отладка: Глава ${currentChapterIndex}/${chapters.size}",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    fontSize = 12.sp
+                )
+            }
+
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    lineHeight = 28.sp,
-                    fontSize = 18.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurface
-            )
+                    .padding(16.dp)
+            ) {
+                items(chapterContent) { paragraph ->
+                    Text(
+                        text = paragraph,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            lineHeight = 24.sp,
+                            fontSize = 16.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     }
 }

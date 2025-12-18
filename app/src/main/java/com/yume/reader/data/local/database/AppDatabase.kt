@@ -20,7 +20,7 @@ import com.yume.reader.data.local.entity.ReadingSessionEntity
         ChapterEntity::class,
         ReadingSessionEntity::class
     ],
-    version = 3,  // Увеличьте версию до 3
+    version = 4,  // Увеличьте версию до 4
     exportSchema = false
 )
 @TypeConverters(DateConverter::class)
@@ -36,7 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                Log.d("AppDatabase", "Запрос на получение базы данных (v3)")
+                Log.d("AppDatabase", "Запрос на получение базы данных (v4)")
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .fallbackToDestructiveMigration()  // Это удалит старую базу
                     .build()
-                Log.d("AppDatabase", "Создан новый экземпляр базы (v3)")
+                Log.d("AppDatabase", "Создан новый экземпляр базы (v4)")
                 INSTANCE = instance
                 instance
             }

@@ -203,6 +203,7 @@ class BookRepository @Inject constructor(
     // EPUB-специфичные методы
     suspend fun importEpubBook(epubBook: EpubBook): Long {
         Log.d("BookRepository", "Импортируем EPUB: ${epubBook.title}")
+        Log.d("BookRepository", "Количество глав: ${epubBook.chapters.size}")
 
         return withContext(Dispatchers.IO) {
             try {
@@ -240,6 +241,19 @@ class BookRepository @Inject constructor(
                         wordCount = epubChapter.wordCount,
                         durationMinutes = calculateReadingTime(epubChapter.wordCount)
                     )
+                    chapterDao.insertChapter(chapterEntity)
+                }
+
+                epubBook.chapters.forEachIndexed { index, epubChapter ->
+                    Log.d("BookRepository", "Глава ${index + 1}: ${epubChapter.title}, " +
+                            "символов: ${epubChapter.content.length}, " +
+                            "слов: ${epubChapter.wordCount}")
+
+                    if (epubChapter.content.isBlank()) {
+                        Log.w("BookRepository", "Глава '${epubChapter.title}' имеет пустой текст!")
+                    }
+
+                    val chapterEntity = ChapterEntity.fromEpubChapter(bookId, epubChapter)
                     chapterDao.insertChapter(chapterEntity)
                 }
 
@@ -388,5 +402,10 @@ class BookRepository @Inject constructor(
                 Log.e("BookRepository", "Ошибка обновления прогресса: ${e.message}")
             }
         }
+    }
+
+    // В BookRepository.kt добавьте:
+    fun getChaptersForBook(bookId: Long): Flow<List<ChapterEntity>> {
+        return chapterDao.getChaptersByBookId(bookId)
     }
 }

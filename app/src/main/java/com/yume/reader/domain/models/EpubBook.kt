@@ -27,6 +27,7 @@ data class EpubChapter(
     val rawHtml: String,
     val chapterNumber: Int,
     val wordCount: Int = 0
+    // Убрали structuredContent из параметров
 )
 
 data class EpubMetadata(
@@ -35,4 +36,5 @@ data class EpubMetadata(
     val publishedDate: String? = null,
     val isbn: String? = null,
     val totalPages: Int = 0
+    // Убрали genres и publisherName из параметров
 )
