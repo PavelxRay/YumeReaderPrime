@@ -1,5 +1,7 @@
 package com.yume.reader.ui.viewmodels
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yume.reader.data.models.ReadingProgress
@@ -153,6 +155,8 @@ class ReadingViewModel @Inject constructor(
         saveProgress()
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
+    // В методе saveProgress добавляем сохранение в BookEntity
     private fun saveProgress() {
         currentBookId?.let { bookId ->
             viewModelScope.launch {
@@ -164,7 +168,24 @@ class ReadingViewModel @Inject constructor(
                     totalChapters = chapters.value.size
                 )
 
-                readingProgressRepository.saveReadingProgress(progress)
+                // Сохраняем в таблице прогресса чтения через репозиторий
+                readingProgressRepository.saveReadingProgress(progress) // Используем saveReadingProgress
+
+                // Также обновляем в таблице книг
+                val totalChapters = chapters.value.size
+                val currentChapter = _currentChapter.value
+                val progressPercent = if (totalChapters > 0) {
+                    (currentChapter.toFloat() / totalChapters) * 100
+                } else {
+                    0f
+                }
+
+                bookRepository.updateReadingProgress(
+                    bookId,
+                    currentChapter,
+                    progressPercent.toInt()
+                )
+
                 needsSave = false
             }
         }
@@ -239,4 +260,6 @@ class ReadingViewModel @Inject constructor(
         saveProgress()
         autoSaveJob?.cancel()
     }
+
+
 }

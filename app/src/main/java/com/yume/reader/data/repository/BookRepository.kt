@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
+import com.yume.reader.data.local.dao.ReadingProgressDao
 import com.yume.reader.data.local.dao.BookDao
 import com.yume.reader.data.local.dao.ChapterDao
 import com.yume.reader.data.local.entity.BookEntity
@@ -24,6 +25,7 @@ import javax.inject.Singleton
 class BookRepository @Inject constructor(
     private val bookDao: BookDao,
     private val chapterDao: ChapterDao,
+    private val readingProgressDao: ReadingProgressDao,
     val context: Context
 ) {
 
@@ -407,5 +409,40 @@ class BookRepository @Inject constructor(
     // В BookRepository.kt добавьте:
     fun getChaptersForBook(bookId: Long): Flow<List<ChapterEntity>> {
         return chapterDao.getChaptersByBookId(bookId)
+    }
+
+    suspend fun getReadingProgressForBook(bookId: Long): Float {
+        return withContext(Dispatchers.IO) {
+            try {
+                val progress = readingProgressDao.getReadingProgress(bookId)
+                    .firstOrNull()
+                progress?.progressPercent ?: 0f
+            } catch (e: Exception) {
+                0f
+            }
+        }
+    }
+
+    // Метод для обновления прогресса при чтении
+    suspend fun updateBookReadingProgress(bookId: Long, currentChapter: Int, progressPercent: Float) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Обновляем в таблице чтения
+                readingProgressDao.updateProgress(
+                    bookId = bookId,
+                    chapter = currentChapter,
+                    progress = progressPercent,
+                    timestamp = java.time.LocalDateTime.now()
+                )
+
+                // Также обновляем в таблице книг для быстрого доступа
+                bookDao.getBookById(bookId)?.let { book ->
+                    val newProgress = (progressPercent * 100).toInt()
+                    bookDao.updateReadingProgress(bookId, currentChapter, newProgress)
+                }
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка обновления прогресса: ${e.message}")
+            }
+        }
     }
 }

@@ -21,27 +21,38 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.yume.reader.domain.models.Book
 import com.yume.reader.ui.components.BookCard
+import com.yume.reader.ui.viewmodels.BookViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingNowScreen(
-    navController: NavController
+    navController: NavController,
+    viewModel: BookViewModel = hiltViewModel()
 ) {
-    // Книги, которые сейчас читаются
-    val readingBooks = listOf(
-        Book(1, "Мастер и Маргарита", "Михаил Булгаков",
-            progress = 65, isReading = true),
-        Book(3, "Преступление и наказание", "Фёдор Достоевский",
-            progress = 30, isReading = true),
-        Book(6, "Братья Карамазовы", "Фёдор Достоевский",
-            progress = 15, isReading = true)
-    )
+    // Получаем книги в процессе чтения из ViewModel
+    val readingBooks by viewModel.readingBooks.collectAsState()
+
+    // Функция для форматирования числа книг
+    fun formatBookCount(count: Int): String {
+        val lastDigit = count % 10
+        val lastTwoDigits = count % 100
+
+        return when {
+            lastTwoDigits in 11..14 -> "$count книг"
+            lastDigit == 1 -> "$count книга"
+            lastDigit in 2..4 -> "$count книги"
+            else -> "$count книг"
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -62,8 +73,8 @@ fun ReadingNowScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    // TODO: Открыть диалог добавления книги
-                    navController.navigate("add_book")
+                    // Навигация на экран добавления книги
+                    navController.navigate("import_epub")
                 },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
@@ -81,7 +92,7 @@ fun ReadingNowScreen(
         ) {
             // Заголовок с количеством книг
             Text(
-                text = "${readingBooks.size} книги в процессе",
+                text = formatBookCount(readingBooks.size),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -103,15 +114,24 @@ fun ReadingNowScreen(
                             },
                             onDetailsClick = {
                                 navController.navigate("book_details/${book.id}")
+                            },
+                            onFavoriteClick = {
+                                // Переключаем избранное
+                                viewModel.toggleFavorite(book.id, !book.isFavorite)
                             }
                         )
+                    }
+
+                    // Добавляем отступ внизу для FAB
+                    item {
+                        Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
             } else {
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = "Нет активных книг",

@@ -1,3 +1,4 @@
+// di/AppModule.kt
 package com.yume.reader.di
 
 import android.content.Context
@@ -51,8 +52,9 @@ object AppModule {
     fun provideBookRepository(
         bookDao: BookDao,
         chapterDao: ChapterDao,
+        readingProgressDao: ReadingProgressDao, // Добавляем
         @ApplicationContext context: Context
-    ): BookRepository = BookRepository(bookDao, chapterDao, context)
+    ): BookRepository = BookRepository(bookDao, chapterDao, readingProgressDao, context)
 
     @Provides
     @Singleton

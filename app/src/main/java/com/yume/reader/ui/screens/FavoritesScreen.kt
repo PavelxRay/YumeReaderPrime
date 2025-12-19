@@ -14,52 +14,38 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.yume.reader.domain.models.Book
 import com.yume.reader.ui.components.BookCard
-
+import com.yume.reader.ui.viewmodels.BookViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FavoritesScreen(
-    navController: NavController
+    navController: NavController,
+    viewModel: BookViewModel = hiltViewModel()
 ) {
-    // Временные данные
-    val allBooks = listOf(
-        Book(1, "Мастер и Маргарита", "Михаил Булгаков",
-            progress = 65, isReading = true, isFavorite = true),
-        Book(2, "1984", "Джордж Оруэлл",
-            progress = 100, isFinished = true, isFavorite = true),
-        Book(3, "Преступление и наказание", "Фёдор Достоевский",
-            progress = 30, isReading = true, isFavorite = true),
-        Book(4, "Маленький принц", "Антуан де Сент-Экзюпери",
-            progress = 100, isFinished = true, isFavorite = true)
-    )
+    // Получаем данные из ViewModel
+    val favoriteBooks by viewModel.favoriteBooks.collectAsState()
 
     // Состояние для фильтров
     val selectedFilter = remember { mutableStateOf("Все") }
     val filters = listOf("Все", "Читаю", "Прочитано")
 
     val filteredBooks = when (selectedFilter.value) {
-        "Читаю" -> allBooks.filter { it.isReading }
-        "Прочитано" -> allBooks.filter { it.isFinished }
-        else -> allBooks
+        "Читаю" -> favoriteBooks.filter { it.isReading }
+        "Прочитано" -> favoriteBooks.filter { it.isFinished }
+        else -> favoriteBooks
     }
 
     Scaffold(
@@ -86,7 +72,7 @@ fun FavoritesScreen(
         ) {
             // Заголовок с количеством книг
             Text(
-                text = "${allBooks.size} книг в избранном",
+                text = "${favoriteBooks.size} книг в избранном",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -133,6 +119,10 @@ fun FavoritesScreen(
                             },
                             onDetailsClick = {
                                 navController.navigate("book_details/${book.id}")
+                            },
+                            onFavoriteClick = {
+                                // Удаляем из избранного
+                                viewModel.toggleFavorite(book.id, false)
                             }
                         )
                     }

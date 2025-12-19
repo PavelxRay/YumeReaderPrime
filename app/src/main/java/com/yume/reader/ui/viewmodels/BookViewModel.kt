@@ -1,3 +1,4 @@
+// ui/viewmodels/BookViewModel.kt
 package com.yume.reader.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
@@ -9,6 +10,7 @@ import com.yume.reader.domain.models.toEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -43,6 +45,18 @@ class BookViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    // Получение прогресса для конкретной книги
+    suspend fun getBookProgress(bookId: Long): Float {
+        return bookRepository.getReadingProgressForBook(bookId)
+    }
+
+    // Обновление прогресса книги
+    fun updateBookProgress(bookId: Long, currentChapter: Int, progressPercent: Float) {
+        viewModelScope.launch {
+            bookRepository.updateBookReadingProgress(bookId, currentChapter, progressPercent)
+        }
+    }
+
     fun addBook(book: Book) = viewModelScope.launch {
         bookRepository.addBook(book.toEntity())
     }
@@ -63,6 +77,7 @@ class BookViewModel @Inject constructor(
         bookRepository.toggleReadingStatus(bookId, isReading)
     }
 
+    // Для поиска
     fun searchBooks(query: String): StateFlow<List<Book>> {
         return bookRepository.searchBooks(query)
             .map { entities -> entities.map { it.toDomain() } }
@@ -71,5 +86,18 @@ class BookViewModel @Inject constructor(
                 started = SharingStarted.WhileSubscribed(5000),
                 initialValue = emptyList()
             )
+    }
+
+    // Получение статистики
+    suspend fun getStatistics(): Map<String, Any> {
+        val finishedCount = bookRepository.getFinishedBooksCount().firstOrNull() ?: 0
+        val readingCount = bookRepository.getReadingBooksCount().firstOrNull() ?: 0
+        val totalPages = bookRepository.getTotalPagesRead().firstOrNull() ?: 0
+
+        return mapOf(
+            "finishedBooks" to finishedCount,
+            "readingBooks" to readingCount,
+            "totalPages" to totalPages
+        )
     }
 }
