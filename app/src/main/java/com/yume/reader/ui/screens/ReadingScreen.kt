@@ -1,249 +1,566 @@
 package com.yume.reader.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.*
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.yume.reader.data.models.TextSettings
 import com.yume.reader.ui.viewmodels.ReadingViewModel
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalUnitApi::class)
 @Composable
 fun ReadingScreen(
     navController: NavController,
     bookId: Long,
     viewModel: ReadingViewModel = hiltViewModel()
 ) {
-    // Состояние загрузки
+    // Состояния
     var isLoading by remember { mutableStateOf(true) }
-    var showEmptyState by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showProgressIndicator by remember { mutableStateOf(true) }
+    var lastTapPosition by remember { mutableStateOf(Offset.Zero) }
 
-    // Инициализируем ViewModel с bookId
-    LaunchedEffect(bookId) {
-        viewModel.setBookId(bookId)
-        isLoading = true
-        showEmptyState = false
-    }
+    // Настройки текста
+    val textSettings by viewModel.textSettings.collectAsState(initial = TextSettings())
 
+    // Остальные состояния как раньше...
     val chapters by viewModel.chapters.collectAsState()
     val currentChapterIndex by viewModel.currentChapter.collectAsState()
     val readingProgress by viewModel.readingProgress.collectAsState()
 
-    // Получаем текущую главу
     val currentChapter = remember(chapters, currentChapterIndex) {
         chapters.getOrNull(currentChapterIndex - 1)
     }
 
-    // Когда главы загрузились
-    LaunchedEffect(chapters) {
-        if (chapters.isNotEmpty()) {
-            isLoading = false
-            showEmptyState = chapters.all { it.content.isBlank() }
-        } else if (!isLoading) {
-            showEmptyState = true
+    // Автосохранение прогресса при прокрутке
+    val lazyListState = rememberLazyListState()
+    LaunchedEffect(lazyListState.firstVisibleItemIndex) {
+        if (lazyListState.isScrollInProgress) {
+            viewModel.saveReadingProgress()
         }
     }
 
-    // Показать состояние загрузки
-    if (isLoading) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Загрузка книги...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        return
+    // Определяем фон в зависимости от темы
+    val backgroundColor = when (textSettings.theme) {
+        "dark" -> Color(0xFF121212)
+        "sepia" -> Color(0xFFF8F0E3)
+        "contrast" -> Color.Black
+        else -> Color.White
     }
 
-    // Показать пустое состояние
-    if (showEmptyState || chapters.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MenuBook,
-                    contentDescription = "Книга",
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Книга не найдена или повреждена",
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Попробуйте переимпортировать книгу",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = { navController.popBackStack() }) {
-                    Text(text = "Вернуться к библиотеке")
-                }
-            }
-        }
-        return
+    val textColor = when (textSettings.theme) {
+        "dark" -> Color.White
+        "sepia" -> Color(0xFF5C4B37)
+        "contrast" -> Color(0xFF00FF00) // Зеленый для контраста
+        else -> Color.Black
     }
 
-    // Проверить, что текущая глава существует и имеет контент
-    val validChapter = if (currentChapter == null || currentChapter.content.isBlank()) {
-        // Найти первую главу с контентом
-        chapters.firstOrNull { it.content.isNotBlank() } ?: chapters.firstOrNull()
-    } else {
-        currentChapter
-    }
-
-    val chapterContent = remember(validChapter) {
-        val content = validChapter?.content ?: ""
-        if (content.isEmpty()) {
-            emptyList()
-        } else {
-            // Разбиваем на абзацы, фильтруем короткие строки
-            content.split("\n\n", "\n")
-                .map { it.trim() }
-                .filter { it.isNotBlank() && it.length > 3 }
-                .filterNot { it.matches(Regex("^[\\d\\s.:/-]+$")) } // Фильтруем номера страниц
-        }
+    val fontFamily = when (textSettings.fontFamily) {
+        "Georgia" -> FontFamily.Serif
+        "Arial" -> FontFamily.SansSerif
+        "Courier" -> FontFamily.Monospace
+        else -> FontFamily.Default
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = validChapter?.title ?: "Без названия",
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+            if (showProgressIndicator) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = currentChapter?.title ?: "Без названия",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = textColor
+                            )
+                            // Линейный индикатор прогресса
+                            LinearProgressIndicator(
+                                progress = { readingProgress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .padding(top = 4.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.primaryContainer
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Назад", tint = textColor)
+                        }
+                    },
+                    actions = {
+                        // Кнопка настроек
+                        IconButton(
+                            onClick = { showSettings = !showSettings },
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "Настройки",
+                                tint = textColor
+                            )
+                        }
+
+                        // Процент прочтения
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${(readingProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White
+                            )
+                        }
                     }
-                },
-                actions = {
-                    // Индикатор прогресса
-                    Text(
-                        text = "${(readingProgress * 100).toInt()}%",
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-            )
+                )
+            }
         },
         bottomBar = {
-            BottomAppBar {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            if (showProgressIndicator) {
+                BottomAppBar(
+                    containerColor = backgroundColor
                 ) {
-                    IconButton(
-                        onClick = { viewModel.previousChapter() },
-                        enabled = currentChapterIndex > 1
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущая глава")
-                    }
+                        IconButton(
+                            onClick = { viewModel.previousChapter() },
+                            enabled = currentChapterIndex > 1
+                        ) {
+                            Icon(
+                                Icons.Default.ArrowBack,
+                                contentDescription = "Предыдущая глава",
+                                tint = textColor
+                            )
+                        }
 
-                    // Навигация по главам
-                    Text(
-                        text = "$currentChapterIndex/${chapters.size}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                        // Навигация по главам с прогрессом
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Глава $currentChapterIndex/${chapters.size}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = textColor
+                            )
+                            Text(
+                                text = "Прогресс: ${(readingProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = textColor.copy(alpha = 0.7f)
+                            )
+                        }
 
-                    IconButton(
-                        onClick = { viewModel.nextChapter() },
-                        enabled = currentChapterIndex < chapters.size
-                    ) {
-                        Icon(Icons.Default.ArrowForward, contentDescription = "Следующая глава")
+                        IconButton(
+                            onClick = { viewModel.nextChapter() },
+                            enabled = currentChapterIndex < chapters.size
+                        ) {
+                            Icon(
+                                Icons.Default.ArrowForward,
+                                contentDescription = "Следующая глава",
+                                tint = textColor
+                            )
+                        }
                     }
                 }
             }
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.surface)
+                .background(backgroundColor)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            lastTapPosition = offset
+                            // При тапе по центру экрана - показать/скрыть UI
+                            val screenWidth = size.width
+                            val tapX = offset.x
+
+                            if (tapX > screenWidth * 0.3 && tapX < screenWidth * 0.7) {
+                                showProgressIndicator = !showProgressIndicator
+                            }
+                        },
+                        onLongPress = {
+                            // Долгое нажатие для быстрой настройки
+                            showSettings = true
+                        }
+                    )
+                }
         ) {
-            if (chapterContent.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "Текст главы пуст",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Попробуйте перейти к следующей главе",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            // Основной контент
+            val chapterContent = remember(currentChapter) {
+                currentChapter?.content?.let { content ->
+                    content.split("\n\n", "\n")
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() && it.length > 3 }
+                        .filterNot { it.matches(Regex("^[\\d\\s.:/-]+$")) }
+                } ?: emptyList()
+            }
+
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = textSettings.margins.dp,
+                        end = textSettings.margins.dp,
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding()
+                    )
+            ) {
+                items(chapterContent) { paragraph ->
+                    Text(
+                        text = paragraph,
+                        modifier = Modifier.padding(
+                            vertical = textSettings.paragraphSpacing.dp
+                        ),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = textSettings.fontSize.sp,
+                            lineHeight = (textSettings.fontSize * textSettings.lineHeight).sp,
+                            fontFamily = fontFamily
+                        ),
+                        color = textColor
+                    )
                 }
-            } else {
-                LazyColumn(
+            }
+
+            // Оверлей настроек
+            AnimatedVisibility(
+                visible = showSettings,
+                enter = fadeIn() + slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(durationMillis = 300)
+                ),
+                exit = fadeOut() + slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(durationMillis = 300)
+                )
+            ) {
+                SettingsOverlay(
+                    textSettings = textSettings,
+                    onSettingsUpdate = { newSettings ->
+                        viewModel.updateTextSettings(newSettings)
+                    },
+                    onClose = { showSettings = false },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
-                    items(chapterContent) { paragraph ->
-                        Text(
-                            text = paragraph,
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                lineHeight = 24.sp,
-                                fontSize = 16.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
+                        .fillMaxHeight()
+                        .width(LocalConfiguration.current.screenWidthDp.dp * 0.85f)
+                        .align(Alignment.CenterEnd)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                            RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
                         )
+                )
+            }
+
+            // Быстрое меню при долгом нажатии
+            if (lastTapPosition != Offset.Zero && showSettings.not()) {
+                QuickSettingsMenu(
+                    position = lastTapPosition,
+                    textSettings = textSettings,
+                    onBrightnessChange = { brightness ->
+                        viewModel.updateTextSettings(
+                            textSettings.copy(brightness = brightness)
+                        )
+                    },
+                    onFontSizeChange = { fontSize ->
+                        viewModel.updateTextSettings(
+                            textSettings.copy(fontSize = fontSize)
+                        )
+                    },
+                    onDismiss = { lastTapPosition = Offset.Zero }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsOverlay(
+    textSettings: TextSettings,
+    onSettingsUpdate: (TextSettings) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Заголовок
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Настройки чтения",
+                style = MaterialTheme.typography.titleLarge,
+                fontSize = 20.sp
+            )
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Закрыть")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Размер шрифта
+        SettingSection(title = "Размер шрифта") {
+            Row(
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                IconButton(
+                    onClick = {
+                        onSettingsUpdate(textSettings.copy(fontSize = textSettings.fontSize - 2))
+                    },
+                    enabled = textSettings.fontSize > 12
+                ) {
+                    Icon(Icons.Default.Remove, contentDescription = "Уменьшить")
+                }
+
+                Text(
+                    text = "${textSettings.fontSize.toInt()}sp",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                IconButton(
+                    onClick = {
+                        onSettingsUpdate(textSettings.copy(fontSize = textSettings.fontSize + 2))
+                    },
+                    enabled = textSettings.fontSize < 30
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Увеличить")
+                }
+            }
+        }
+
+        // Цветовая тема
+        SettingSection(title = "Цветовая тема") {
+            val themes = listOf("Светлая", "Тёмная", "Сепия", "Контраст")
+            val themeValues = listOf("light", "dark", "sepia", "contrast")
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                themeValues.forEachIndexed { index, theme ->
+                    FilterChip(
+                        selected = textSettings.theme == theme,
+                        onClick = {
+                            onSettingsUpdate(textSettings.copy(theme = theme))
+                        },
+                        label = { Text(themes[index]) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (index < themes.lastIndex) {
+                        Spacer(modifier = Modifier.width(4.dp))
                     }
                 }
+            }
+        }
+
+        // Шрифт
+        SettingSection(title = "Шрифт") {
+            val fonts = listOf("Georgia", "Arial", "Courier")
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                fonts.forEach { font ->
+                    FilterChip(
+                        selected = textSettings.fontFamily == font,
+                        onClick = {
+                            onSettingsUpdate(textSettings.copy(fontFamily = font))
+                        },
+                        label = { Text(font) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+            }
+        }
+
+        // Межстрочный интервал
+        SettingSection(title = "Межстрочный интервал") {
+            val lineHeights = listOf("Узкий" to 1.2f, "Средний" to 1.5f, "Широкий" to 2.0f)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                lineHeights.forEach { (label, value) ->
+                    FilterChip(
+                        selected = textSettings.lineHeight == value,
+                        onClick = {
+                            onSettingsUpdate(textSettings.copy(lineHeight = value))
+                        },
+                        label = { Text(label) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+            }
+        }
+
+        // Яркость
+        SettingSection(title = "Яркость экрана") {
+            Slider(
+                value = textSettings.brightness,
+                onValueChange = { newValue ->
+                    onSettingsUpdate(textSettings.copy(brightness = newValue))
+                },
+                valueRange = 0.5f..1f,
+                steps = 5,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "${(textSettings.brightness * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
+
+        // Отступы
+        SettingSection(title = "Отступы страницы") {
+            Slider(
+                value = textSettings.margins,
+                onValueChange = { newValue ->
+                    onSettingsUpdate(textSettings.copy(margins = newValue))
+                },
+                valueRange = 8f..32f,
+                steps = 6,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "${textSettings.margins.toInt()}dp",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Кнопка сброса
+        Button(
+            onClick = {
+                onSettingsUpdate(TextSettings())
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Text("Сбросить настройки")
+        }
+    }
+}
+
+@Composable
+fun SettingSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(vertical = 8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        content()
+        Divider(
+            modifier = Modifier.padding(vertical = 16.dp),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
+    }
+}
+
+@Composable
+fun QuickSettingsMenu(
+    position: Offset,
+    textSettings: TextSettings,
+    onBrightnessChange: (Float) -> Unit,
+    onFontSizeChange: (Float) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .offset(position.x.dp, position.y.dp)
+            .background(
+                MaterialTheme.colorScheme.surface,
+                RoundedCornerShape(8.dp)
+            )
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+            .padding(8.dp)
+    ) {
+        Column {
+            // Быстрая регулировка яркости
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Brightness6, contentDescription = null, modifier = Modifier.size(16.dp))
+                Slider(
+                    value = textSettings.brightness,
+                    onValueChange = onBrightnessChange,
+                    valueRange = 0.5f..1f,
+                    modifier = Modifier.width(150.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Быстрая регулировка размера шрифта
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.TextFields, contentDescription = null, modifier = Modifier.size(16.dp))
+                Slider(
+                    value = textSettings.fontSize,
+                    onValueChange = onFontSizeChange,
+                    valueRange = 12f..30f,
+                    modifier = Modifier.width(150.dp)
+                )
             }
         }
     }
