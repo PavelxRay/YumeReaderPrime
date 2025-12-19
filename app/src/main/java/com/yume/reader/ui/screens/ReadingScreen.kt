@@ -11,21 +11,20 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.*
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,6 +40,11 @@ fun ReadingScreen(
     bookId: Long,
     viewModel: ReadingViewModel = hiltViewModel()
 ) {
+    // Инициализируем ViewModel с bookId
+    LaunchedEffect(bookId) {
+        viewModel.setBookId(bookId)
+    }
+
     // Состояния
     var isLoading by remember { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
@@ -50,13 +54,19 @@ fun ReadingScreen(
     // Настройки текста
     val textSettings by viewModel.textSettings.collectAsState(initial = TextSettings())
 
-    // Остальные состояния как раньше...
+    // Данные из ViewModel
     val chapters by viewModel.chapters.collectAsState()
     val currentChapterIndex by viewModel.currentChapter.collectAsState()
     val readingProgress by viewModel.readingProgress.collectAsState()
+    val isLoadingState by viewModel.isLoading.collectAsState()
 
     val currentChapter = remember(chapters, currentChapterIndex) {
         chapters.getOrNull(currentChapterIndex - 1)
+    }
+
+    // Обновляем локальное состояние загрузки
+    LaunchedEffect(isLoadingState, chapters) {
+        isLoading = isLoadingState
     }
 
     // Автосохранение прогресса при прокрутке
@@ -65,6 +75,30 @@ fun ReadingScreen(
         if (lazyListState.isScrollInProgress) {
             viewModel.saveReadingProgress()
         }
+    }
+
+    // Показать состояние загрузки
+    if (isLoading || chapters.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = if (chapters.isEmpty()) "Загрузка глав..." else "Загрузка...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
     }
 
     // Определяем фон в зависимости от темы
@@ -110,13 +144,17 @@ fun ReadingScreen(
                                     .height(4.dp)
                                     .padding(top = 4.dp),
                                 color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.primaryContainer
+                                trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                             )
                         }
                     },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Назад", tint = textColor)
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Назад",
+                                tint = textColor
+                            )
                         }
                     },
                     actions = {
@@ -148,7 +186,14 @@ fun ReadingScreen(
                                 color = Color.White
                             )
                         }
-                    }
+                    },
+                    // ВАЖНО: Добавляем цвета для TopAppBar
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = backgroundColor,
+                        titleContentColor = textColor,
+                        actionIconContentColor = textColor,
+                        navigationIconContentColor = textColor
+                    )
                 )
             }
         },
@@ -167,7 +212,7 @@ fun ReadingScreen(
                             enabled = currentChapterIndex > 1
                         ) {
                             Icon(
-                                Icons.Default.ArrowBack,
+                                Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Предыдущая глава",
                                 tint = textColor
                             )
@@ -192,7 +237,7 @@ fun ReadingScreen(
                             enabled = currentChapterIndex < chapters.size
                         ) {
                             Icon(
-                                Icons.Default.ArrowForward,
+                                Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = "Следующая глава",
                                 tint = textColor
                             )
@@ -235,30 +280,55 @@ fun ReadingScreen(
                 } ?: emptyList()
             }
 
-            LazyColumn(
-                state = lazyListState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        start = textSettings.margins.dp,
-                        end = textSettings.margins.dp,
-                        top = paddingValues.calculateTopPadding(),
-                        bottom = paddingValues.calculateBottomPadding()
-                    )
-            ) {
-                items(chapterContent) { paragraph ->
-                    Text(
-                        text = paragraph,
-                        modifier = Modifier.padding(
-                            vertical = textSettings.paragraphSpacing.dp
-                        ),
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = textSettings.fontSize.sp,
-                            lineHeight = (textSettings.fontSize * textSettings.lineHeight).sp,
-                            fontFamily = fontFamily
-                        ),
-                        color = textColor
-                    )
+            if (chapterContent.isEmpty()) {
+                // Состояние "пустая глава"
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Текст главы отсутствует",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = textColor
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Попробуйте перейти к следующей главе",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = textColor.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = textSettings.margins.dp,
+                            end = textSettings.margins.dp,
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding()
+                        )
+                ) {
+                    items(chapterContent) { paragraph ->
+                        Text(
+                            text = paragraph,
+                            modifier = Modifier.padding(
+                                vertical = textSettings.paragraphSpacing.dp
+                            ),
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = textSettings.fontSize.sp,
+                                lineHeight = (textSettings.fontSize * textSettings.lineHeight).sp,
+                                fontFamily = fontFamily
+                            ),
+                            color = textColor
+                        )
+                    }
                 }
             }
 
@@ -511,7 +581,7 @@ fun SettingSection(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         content()
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.padding(vertical = 16.dp),
             thickness = 1.dp,
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)

@@ -1,14 +1,10 @@
-// di/AppModule.kt
 package com.yume.reader.di
 
 import android.content.Context
 import com.yume.reader.data.epub.EpubParser
-import com.yume.reader.data.local.dao.BookDao
-import com.yume.reader.data.local.dao.ChapterDao
-import com.yume.reader.data.local.dao.ReadingSessionDao
+import com.yume.reader.data.local.dao.*
 import com.yume.reader.data.local.database.AppDatabase
-import com.yume.reader.data.repository.BookRepository
-import com.yume.reader.data.repository.ChapterRepository
+import com.yume.reader.data.repository.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,62 +16,61 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    // Контекст приложения
     @Provides
     @Singleton
-    fun provideContext(@ApplicationContext context: Context): Context {
-        return context
-    }
+    fun provideContext(@ApplicationContext context: Context): Context = context
 
-    // База данных
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return AppDatabase.getDatabase(context)
     }
 
-    // DAO объекты
     @Provides
     @Singleton
-    fun provideBookDao(database: AppDatabase): BookDao {
-        return database.bookDao()
-    }
+    fun provideBookDao(database: AppDatabase): BookDao = database.bookDao()
 
     @Provides
     @Singleton
-    fun provideChapterDao(database: AppDatabase): ChapterDao {
-        return database.chapterDao()
-    }
+    fun provideChapterDao(database: AppDatabase): ChapterDao = database.chapterDao()
 
     @Provides
     @Singleton
-    fun provideReadingSessionDao(database: AppDatabase): ReadingSessionDao {
-        return database.readingSessionDao()
-    }
+    fun provideReadingSessionDao(database: AppDatabase): ReadingSessionDao = database.readingSessionDao()
 
-    // Репозитории
+    @Provides
+    @Singleton
+    fun provideTextSettingsDao(database: AppDatabase): TextSettingsDao = database.textSettingsDao()
+
+    @Provides
+    @Singleton
+    fun provideReadingProgressDao(database: AppDatabase): ReadingProgressDao = database.readingProgressDao()
+
     @Provides
     @Singleton
     fun provideBookRepository(
         bookDao: BookDao,
         chapterDao: ChapterDao,
         @ApplicationContext context: Context
-    ): BookRepository {
-        return BookRepository(bookDao, chapterDao, context)
-    }
+    ): BookRepository = BookRepository(bookDao, chapterDao, context)
 
     @Provides
     @Singleton
-    fun provideChapterRepository(
-        chapterDao: ChapterDao
-    ): ChapterRepository {
-        return ChapterRepository(chapterDao)
-    }
+    fun provideChapterRepository(chapterDao: ChapterDao): ChapterRepository = ChapterRepository(chapterDao)
 
-    // EPUB парсер
     @Provides
     @Singleton
-    fun provideEpubParser(@ApplicationContext context: Context): EpubParser {
-        return EpubParser(context)
-    }
+    fun provideReadingProgressRepository(
+        readingProgressDao: ReadingProgressDao
+    ): ReadingProgressRepository = ReadingProgressRepository(readingProgressDao)
+
+    @Provides
+    @Singleton
+    fun provideSettingsRepository(
+        textSettingsDao: TextSettingsDao
+    ): SettingsRepository = SettingsRepositoryImpl(textSettingsDao)
+
+    @Provides
+    @Singleton
+    fun provideEpubParser(@ApplicationContext context: Context): EpubParser = EpubParser(context)
 }
