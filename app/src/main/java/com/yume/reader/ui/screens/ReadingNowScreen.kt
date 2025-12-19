@@ -168,7 +168,6 @@ fun ReadingNowScreen(
                                 navController.navigate("book_details/${book.id}")
                             },
                             onFavoriteClick = {
-                                // Переключаем избранное
                                 viewModel.toggleFavorite(book.id, !book.isFavorite)
                             }
                         )

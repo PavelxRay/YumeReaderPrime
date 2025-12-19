@@ -38,11 +38,13 @@ import kotlinx.coroutines.launch
 fun ReadingScreen(
     navController: NavController,
     bookId: Long,
+    chapter: Int? = null,
     viewModel: ReadingViewModel = hiltViewModel()
 ) {
     // Инициализируем ViewModel с bookId
-    LaunchedEffect(bookId) {
+    LaunchedEffect(bookId, chapter) {
         viewModel.setBookId(bookId)
+        chapter?.let { viewModel.goToChapter(it) }
     }
 
     // Состояния

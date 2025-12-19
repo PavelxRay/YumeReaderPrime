@@ -6,6 +6,7 @@ import com.yume.reader.data.epub.EpubParser
 import com.yume.reader.data.local.dao.*
 import com.yume.reader.data.local.database.AppDatabase
 import com.yume.reader.data.repository.*
+import com.yume.reader.ui.viewmodels.BookDetailsViewModel
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -75,4 +76,12 @@ object AppModule {
     @Provides
     @Singleton
     fun provideEpubParser(@ApplicationContext context: Context): EpubParser = EpubParser(context)
+
+    fun provideBookDetailsViewModel(
+        bookRepository: BookRepository,
+        chapterRepository: ChapterRepository,
+        readingProgressRepository: ReadingProgressRepository
+    ): BookDetailsViewModel {
+        return BookDetailsViewModel(bookRepository, chapterRepository, readingProgressRepository)
+    }
 }

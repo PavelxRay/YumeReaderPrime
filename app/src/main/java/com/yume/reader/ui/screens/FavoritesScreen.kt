@@ -182,8 +182,7 @@ fun FavoritesScreen(
                                 navController.navigate("book_details/${book.id}")
                             },
                             onFavoriteClick = {
-                                // Удаляем из избранного
-                                viewModel.toggleFavorite(book.id, false)
+                                viewModel.toggleFavorite(book.id, !book.isFavorite)
                             }
                         )
                     }

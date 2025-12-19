@@ -1,4 +1,4 @@
-// ui/components/BookCard.kt
+// ui/components/BookCard.kt (обновляем onDetailsClick)
 package com.yume.reader.ui.components
 
 import androidx.compose.foundation.layout.*
@@ -21,7 +21,7 @@ import com.yume.reader.domain.models.Book
 fun BookCard(
     book: Book,
     onReadClick: () -> Unit,
-    onDetailsClick: () -> Unit,
+    onDetailsClick: () -> Unit, // Это теперь будет вести на BookDetailsScreen
     onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -31,7 +31,7 @@ fun BookCard(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp),
-        onClick = onDetailsClick
+        onClick = onDetailsClick // Клик по карточке ведет на детали
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
