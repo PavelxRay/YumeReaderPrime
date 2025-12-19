@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.yume.reader.ui.components.BookCard
 import com.yume.reader.ui.viewmodels.BookViewModel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -41,16 +42,24 @@ fun LibraryScreen(
     val favoriteBooks by viewModel.favoriteBooks.collectAsState()
 
     // Состояния
-    var selectedTab by remember { mutableStateOf(0) }
     var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Статистика
-    val statistics by produceState(initialValue = emptyMap<String, Any>()) {
-        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
-        scope.launch {
-            value = viewModel.getStatistics()
+    // Исправленная статистика - автоматически обновляется при изменении книг
+    val statistics = remember(books) {
+        val finishedBooks = books.count { it.isFinished }
+        val readingBooksCount = books.count { it.isReading && !it.isFinished }
+        val totalChapters = books.sumOf { book ->
+            // Если книга завершена, считаем все главы
+            if (book.isFinished) book.totalPages
+            // Иначе считаем только прочитанные главы
+            else book.currentPage
         }
+        mapOf(
+            "finishedBooks" to finishedBooks,
+            "readingBooks" to readingBooksCount,
+            "totalChapters" to totalChapters
+        )
     }
 
     // Функция для форматирования чисел книг
@@ -66,28 +75,19 @@ fun LibraryScreen(
         }
     }
 
-    // Определяем текущий список книг в зависимости от выбранной вкладки
-    val currentBookList = when (selectedTab) {
-        0 -> books // Все книги
-        1 -> readingBooks // Читаю сейчас
-        2 -> favoriteBooks // Избранное
-        else -> books
-    }
-
     // Фильтруем по поисковому запросу, если есть
     val filteredBooks = if (searchQuery.isNotBlank()) {
-        currentBookList.filter { book ->
+        books.filter { book ->
             book.title.contains(searchQuery, ignoreCase = true) ||
                     book.author.contains(searchQuery, ignoreCase = true)
         }
     } else {
-        currentBookList
+        books
     }
 
     Scaffold(
         topBar = {
             if (showSearchBar) {
-                // Альтернатива SearchBar с использованием TextField
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -140,15 +140,14 @@ fun LibraryScreen(
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
-                            if (selectedTab == 0) {
-                                Text(
-                                    text = "${formatBookCount(books.size)}, ${readingBooks.size} в процессе",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            // Всегда показываем статистику в заголовке
+                            Text(
+                                text = "${formatBookCount(books.size)}, ${readingBooks.size} в процессе",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -173,40 +172,6 @@ fun LibraryScreen(
                     contentDescription = "Добавить книгу"
                 )
             }
-        },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.MenuBook, contentDescription = "Все книги") },
-                    label = { Text("Все") },
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 }
-                )
-                NavigationBarItem(
-                    icon = {
-                        BadgedBox(
-                            badge = {
-                                if (readingBooks.isNotEmpty()) {
-                                    Badge {
-                                        Text(readingBooks.size.toString())
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.Book, contentDescription = "Читаю сейчас")
-                        }
-                    },
-                    label = { Text("Читаю") },
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Bookmark, contentDescription = "Избранное") },
-                    label = { Text("Избранное") },
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 }
-                )
-            }
         }
     ) { paddingValues ->
         Column(
@@ -215,8 +180,8 @@ fun LibraryScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Показываем статистику на вкладке "Все книги"
-            if (selectedTab == 0 && searchQuery.isBlank()) {
+            // Показываем статистику, если не ведем поиск
+            if (searchQuery.isBlank()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -225,7 +190,7 @@ fun LibraryScreen(
                 ) {
                     // Статистика: прочитано книг
                     StatisticCard(
-                        title = "Прочитано",
+                        title = "Прочитано книг",
                         value = (statistics["finishedBooks"] as? Int ?: 0).toString(),
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
@@ -233,16 +198,16 @@ fun LibraryScreen(
 
                     // Статистика: читаю сейчас
                     StatisticCard(
-                        title = "Читаю",
+                        title = "Читаю сейчас",
                         value = (statistics["readingBooks"] as? Int ?: 0).toString(),
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.weight(1f)
                     )
 
-                    // Статистика: страниц прочитано
+                    // Статистика: глав прочитано
                     StatisticCard(
-                        title = "Страниц",
-                        value = (statistics["totalPages"] as? Int ?: 0).toString(),
+                        title = "Прочитано глав",
+                        value = (statistics["totalChapters"] as? Int ?: 0).toString(),
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.weight(1f)
                     )
@@ -292,8 +257,6 @@ fun LibraryScreen(
                     Text(
                         text = when {
                             searchQuery.isNotBlank() -> "По запросу '$searchQuery' ничего не найдено"
-                            selectedTab == 1 -> "Нет активных книг для чтения"
-                            selectedTab == 2 -> "Нет избранных книг"
                             else -> "Библиотека пуста"
                         },
                         style = MaterialTheme.typography.bodyMedium,
@@ -302,7 +265,7 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = 32.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    if (selectedTab == 0 && books.isEmpty()) {
+                    if (books.isEmpty()) {
                         Text(
                             text = "Добавьте книги с помощью кнопки ниже",
                             style = MaterialTheme.typography.bodySmall,

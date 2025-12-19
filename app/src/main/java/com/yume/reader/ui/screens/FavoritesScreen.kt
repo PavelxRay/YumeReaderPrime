@@ -1,27 +1,19 @@
 package com.yume.reader.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,31 +30,106 @@ fun FavoritesScreen(
     // Получаем данные из ViewModel
     val favoriteBooks by viewModel.favoriteBooks.collectAsState()
 
-    // Состояние для фильтров
-    val selectedFilter = remember { mutableStateOf("Все") }
+    // Состояния
+    var showSearchBar by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("Все") }
+
+    // Фильтры
     val filters = listOf("Все", "Читаю", "Прочитано")
 
-    val filteredBooks = when (selectedFilter.value) {
-        "Читаю" -> favoriteBooks.filter { it.isReading }
-        "Прочитано" -> favoriteBooks.filter { it.isFinished }
-        else -> favoriteBooks
+    // Фильтруем книги
+    val filteredBooks = remember(favoriteBooks, selectedFilter, searchQuery) {
+        val byStatus = when (selectedFilter) {
+            "Читаю" -> favoriteBooks.filter { it.isReading }
+            "Прочитано" -> favoriteBooks.filter { it.isFinished }
+            else -> favoriteBooks
+        }
+
+        if (searchQuery.isNotBlank()) {
+            byStatus.filter { book ->
+                book.title.contains(searchQuery, ignoreCase = true) ||
+                        book.author.contains(searchQuery, ignoreCase = true)
+            }
+        } else {
+            byStatus
+        }
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Избранное",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                ),
-                modifier = Modifier.statusBarsPadding()
-            )
+            if (showSearchBar) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            showSearchBar = false
+                            searchQuery = ""
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                        }
+
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Поиск в избранном...") },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent
+                            ),
+                            shape = MaterialTheme.shapes.large,
+                            singleLine = true,
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Очистить")
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            } else {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = "Избранное",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${favoriteBooks.size} книг в избранном",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    ),
+                    actions = {
+                        IconButton(onClick = { showSearchBar = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Поиск")
+                        }
+                    },
+                    modifier = Modifier.statusBarsPadding()
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -70,36 +137,30 @@ fun FavoritesScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Заголовок с количеством книг
-            Text(
-                text = "${favoriteBooks.size} книг в избранном",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-
-            // Фильтры
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                filters.forEach { filter ->
-                    FilterChip(
-                        selected = selectedFilter.value == filter,
-                        onClick = { selectedFilter.value = filter },
-                        label = { Text(filter) },
-                        leadingIcon = if (filter == "Все") null else {
-                            {
-                                Icon(
-                                    imageVector = Icons.Default.FilterList,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
+            // Фильтры (только если не ведем поиск)
+            if (searchQuery.isBlank()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    filters.forEach { filter ->
+                        FilterChip(
+                            selected = selectedFilter == filter,
+                            onClick = { selectedFilter = filter },
+                            label = { Text(filter) },
+                            leadingIcon = if (filter == "Все") null else {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.FilterList,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
 
@@ -134,13 +195,21 @@ fun FavoritesScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Нет избранных книг",
+                        text = when {
+                            searchQuery.isNotBlank() -> "По запросу '$searchQuery' ничего не найдено"
+                            selectedFilter != "Все" -> "Нет книг с выбранным фильтром"
+                            else -> "Нет избранных книг"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Добавьте книги в избранное из библиотеки",
+                        text = when {
+                            searchQuery.isNotBlank() -> "Попробуйте другой запрос"
+                            selectedFilter != "Все" -> "Попробуйте другой фильтр"
+                            else -> "Добавьте книги в избранное из библиотеки"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )

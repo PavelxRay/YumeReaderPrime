@@ -89,15 +89,16 @@ class BookViewModel @Inject constructor(
     }
 
     // Получение статистики
-    suspend fun getStatistics(): Map<String, Any> {
-        val finishedCount = bookRepository.getFinishedBooksCount().firstOrNull() ?: 0
-        val readingCount = bookRepository.getReadingBooksCount().firstOrNull() ?: 0
-        val totalPages = bookRepository.getTotalPagesRead().firstOrNull() ?: 0
-
+    fun getStatistics(): Map<String, Any> {
         return mapOf(
-            "finishedBooks" to finishedCount,
-            "readingBooks" to readingCount,
-            "totalPages" to totalPages
+            "finishedBooks" to books.value.count { it.isFinished },
+            "readingBooks" to books.value.count { it.isReading && !it.isFinished },
+            "totalChapters" to books.value.sumOf { book ->
+                // Если книга завершена, считаем все главы
+                if (book.isFinished) book.totalPages
+                // Иначе считаем только прочитанные главы
+                else book.currentPage
+            }
         )
     }
 }
