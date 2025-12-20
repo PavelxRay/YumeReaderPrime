@@ -1,4 +1,3 @@
-// ui/screens/BookDetailsScreen.kt
 package com.yume.reader.ui.screens
 
 import androidx.compose.foundation.background
@@ -8,6 +7,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -94,7 +94,8 @@ fun BookDetailsScreen(
                 totalReadingTime = totalReadingTime,
                 progress = readingProgress?.progressPercent ?: 0f,
                 onReadClick = {
-                    navController.navigate("reader/${book!!.id}")
+                    // Начинаем с первой главы
+                    navController.navigate("reader/${book!!.id}?chapter=1")
                 },
                 onContinueClick = {
                     // Продолжаем с сохраненной главы
@@ -123,8 +124,13 @@ fun BookDetailsScreen(
                     chapters = chapters,
                     currentChapter = currentChapter,
                     onChapterClick = { chapter ->
-                        // Теперь точно переходим к указанной главе
-                        navController.navigate("reader/${book!!.id}?chapter=${chapter.chapterNumber}")
+                        // Переходим к указанной главе
+                        navController.navigate("reader/${book!!.id}?chapter=${chapter.chapterNumber}") {
+                            // Очищаем стек навигации до LibraryScreen
+                            popUpTo("library") {
+                                inclusive = false
+                            }
+                        }
                     },
                     onToggleRead = { chapterId, isRead ->
                         viewModel.toggleChapterReadStatus(chapterId, !isRead)
@@ -170,7 +176,7 @@ private fun DetailsTopBar(
         },
         navigationIcon = {
             IconButton(onClick = onBackClick) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
             }
         },
         actions = {
@@ -211,7 +217,7 @@ private fun SearchTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBackClick) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
             }
 
             TextField(

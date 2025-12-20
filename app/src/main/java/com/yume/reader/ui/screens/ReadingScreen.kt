@@ -1,6 +1,8 @@
 package com.yume.reader.ui.screens
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -33,6 +35,7 @@ import com.yume.reader.data.models.TextSettings
 import com.yume.reader.ui.viewmodels.ReadingViewModel
 import kotlinx.coroutines.launch
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingScreen(

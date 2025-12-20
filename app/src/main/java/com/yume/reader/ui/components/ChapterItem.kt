@@ -1,4 +1,3 @@
-// ui/components/ChapterItem.kt
 package com.yume.reader.ui.components
 
 import androidx.compose.foundation.clickable
@@ -57,7 +56,10 @@ fun ChapterItem(
 
                 // Индикатор прочтения
                 IconButton(
-                    onClick = onToggleRead,
+                    onClick = {
+                        // Отменяем всплытие события
+                        onToggleRead()
+                    },
                     modifier = Modifier.size(24.dp),
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = Color.Transparent
