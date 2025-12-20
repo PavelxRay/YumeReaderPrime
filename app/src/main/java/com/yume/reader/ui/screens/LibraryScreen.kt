@@ -27,8 +27,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.yume.reader.ui.components.BookCard
 import com.yume.reader.ui.viewmodels.BookViewModel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -44,6 +42,45 @@ fun LibraryScreen(
     // Состояния
     var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var selectedBookId by remember { mutableLongStateOf(-1L) }
+
+    // Диалог подтверждения удаления
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteDialog = false
+                selectedBookId = -1L
+            },
+            title = { Text("Удалить книгу") },
+            text = {
+                Text("Вы уверены, что хотите удалить эту книгу? Это действие нельзя отменить. Все данные книги будут удалены.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (selectedBookId != -1L) {
+                            viewModel.deleteBook(selectedBookId)
+                        }
+                        showDeleteDialog = false
+                        selectedBookId = -1L
+                    }
+                ) {
+                    Text("Удалить", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        selectedBookId = -1L
+                    }
+                ) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 
     // Исправленная статистика - автоматически обновляется при изменении книг
     val statistics = remember(books) {
@@ -231,6 +268,10 @@ fun LibraryScreen(
                             },
                             onFavoriteClick = {
                                 viewModel.toggleFavorite(book.id, !book.isFavorite)
+                            },
+                            onLongClick = {
+                                selectedBookId = book.id
+                                showDeleteDialog = true
                             }
                         )
                     }

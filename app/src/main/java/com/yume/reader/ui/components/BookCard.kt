@@ -1,6 +1,6 @@
-// ui/components/BookCard.kt (обновляем onDetailsClick)
 package com.yume.reader.ui.components
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,23 +16,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yume.reader.domain.models.Book
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun BookCard(
     book: Book,
     onReadClick: () -> Unit,
-    onDetailsClick: () -> Unit, // Это теперь будет вести на BookDetailsScreen
+    onDetailsClick: () -> Unit,
     onFavoriteClick: () -> Unit,
+    onLongClick: () -> Unit, // Добавляем обработчик долгого нажатия
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .combinedClickable( // Используем combinedClickable для поддержки обычного и долгого нажатия
+                onClick = onDetailsClick,
+                onLongClick = onLongClick
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp),
-        onClick = onDetailsClick // Клик по карточке ведет на детали
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        )
     ) {
+        // Остальной код остается без изменений
         Column(
             modifier = Modifier.padding(16.dp)
         ) {

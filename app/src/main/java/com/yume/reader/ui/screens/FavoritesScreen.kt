@@ -34,6 +34,45 @@ fun FavoritesScreen(
     var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("Все") }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var selectedBookId by remember { mutableLongStateOf(-1L) }
+
+    // Диалог подтверждения удаления
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteDialog = false
+                selectedBookId = -1L
+            },
+            title = { Text("Удалить книгу") },
+            text = {
+                Text("Вы уверены, что хотите удалить эту книгу? Это действие нельзя отменить. Все данные книги будут удалены.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (selectedBookId != -1L) {
+                            viewModel.deleteBook(selectedBookId)
+                        }
+                        showDeleteDialog = false
+                        selectedBookId = -1L
+                    }
+                ) {
+                    Text("Удалить", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        selectedBookId = -1L
+                    }
+                ) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 
     // Фильтры
     val filters = listOf("Все", "Читаю", "Прочитано")
@@ -183,6 +222,11 @@ fun FavoritesScreen(
                             },
                             onFavoriteClick = {
                                 viewModel.toggleFavorite(book.id, !book.isFavorite)
+                            },
+                            // ДОБАВИТЬ ПАРАМЕТР onLongClick
+                            onLongClick = {
+                                selectedBookId = book.id
+                                showDeleteDialog = true
                             }
                         )
                     }

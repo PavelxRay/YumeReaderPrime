@@ -34,6 +34,9 @@ fun ReadingNowScreen(
     var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var selectedBookId by remember { mutableLongStateOf(-1L) }
+
     // Фильтруем по поисковому запросу, если есть
     val filteredBooks = if (searchQuery.isNotBlank()) {
         readingBooks.filter { book ->
@@ -169,6 +172,11 @@ fun ReadingNowScreen(
                             },
                             onFavoriteClick = {
                                 viewModel.toggleFavorite(book.id, !book.isFavorite)
+                            },
+                            // ДОБАВИТЬ ПАРАМЕТР onLongClick
+                            onLongClick = {
+                                selectedBookId = book.id
+                                showDeleteDialog = true
                             }
                         )
                     }
