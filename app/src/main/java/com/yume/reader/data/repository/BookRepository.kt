@@ -26,8 +26,12 @@ class BookRepository @Inject constructor(
     private val bookDao: BookDao,
     private val chapterDao: ChapterDao,
     private val readingProgressDao: ReadingProgressDao,
-    val context: Context
+    private val chapterContentRepo: ChapterContentRepository, // Добавляем
+    private val context: Context
 ) {
+
+    // Храним загруженные EPUB книги в памяти для быстрого доступа
+    private val loadedEpubBooks = mutableMapOf<Long, EpubBook>()
 
     fun getAllBooks(): Flow<List<BookEntity>> = bookDao.getAllBooks()
         .map { books ->
@@ -124,7 +128,29 @@ class BookRepository @Inject constructor(
 
     suspend fun updateBook(book: BookEntity) = bookDao.updateBook(book)
 
-    suspend fun deleteBook(book: BookEntity) = bookDao.deleteBook(book)
+    suspend fun deleteBook(book: BookEntity) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Удаляем кешированные главы
+                chapterContentRepo.deleteBookChapters(book.id)
+
+                // Удаляем обложку
+                book.coverUrl?.takeIf { it.isNotEmpty() }?.let { coverPath ->
+                    File(coverPath).delete()
+                }
+
+                // Удаляем книгу из базы (каскадно удалятся главы)
+                bookDao.deleteBook(book)
+
+                // Удаляем из памяти
+                loadedEpubBooks.remove(book.id)
+
+                Log.d("BookRepository", "Удалена книга: ${book.title}")
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка удаления книги: ${e.message}")
+            }
+        }
+    }
 
     suspend fun updateReadingProgress(id: Long, page: Int, progress: Int) {
         bookDao.updateReadingProgress(id, page, progress)
@@ -136,64 +162,6 @@ class BookRepository @Inject constructor(
 
     suspend fun toggleReadingStatus(id: Long, isReading: Boolean) {
         bookDao.updateReadingStatus(id, isReading)
-    }
-
-    suspend fun addTestChapters() {
-        Log.d("BookRepository", "📖 Начинаем добавление тестовых глав...")
-
-        val books = getAllBooks().firstOrNull() ?: emptyList()
-        Log.d("BookRepository", "📚 Всего книг найдено: ${books.size}")
-
-        books.forEach { book ->
-            Log.d("BookRepository", " - ${book.title} (id=${book.id})")
-        }
-
-        val masterBook = books.find { it.title == "Мастер и Маргарита" }
-
-        if (masterBook == null) {
-            Log.e("BookRepository", "❌ Книга 'Мастер и Маргарита' не найдена!")
-            return
-        }
-
-        Log.d("BookRepository", "✅ Найдена книга 'Мастер и Маргарита' с id=${masterBook.id}")
-
-        val chapters = listOf(
-            ChapterEntity(
-                bookId = masterBook.id,
-                chapterNumber = 1,
-                title = "Пролог",
-                content = "Однажды весною, в час небывало жаркого заката, в Москве, на Патриарших прудах, появились два гражданина...",
-                wordCount = 1500,
-                durationMinutes = 8
-            ),
-            ChapterEntity(
-                bookId = masterBook.id,
-                chapterNumber = 2,
-                title = "Никогда не разговаривайте с неизвестными",
-                content = "Да, нужно отметить первую странность этого страшного майского вечера...",
-                wordCount = 2000,
-                durationMinutes = 10
-            ),
-            ChapterEntity(
-                bookId = masterBook.id,
-                chapterNumber = 3,
-                title = "Седьмое доказательство",
-                content = "На закате солнца высоко над городом на каменной террасе одного из самых красивых зданий в Москве...",
-                wordCount = 1800,
-                durationMinutes = 9
-            )
-        )
-
-        chapters.forEach { chapter ->
-            try {
-                val id = chapterDao.insertChapter(chapter)
-                Log.d("BookRepository", "✅ Добавлена глава: ${chapter.title} (id=$id)")
-            } catch (e: Exception) {
-                Log.e("BookRepository", "❌ Ошибка при добавлении главы ${chapter.title}: ${e.message}")
-            }
-        }
-
-        Log.d("BookRepository", "🎉 Добавлено ${chapters.size} глав для книги 'Мастер и Маргарита'")
     }
 
     fun getFinishedBooksCount(): Flow<Int> = bookDao.getFinishedBooksCount()
@@ -220,7 +188,7 @@ class BookRepository @Inject constructor(
                     author = epubBook.author,
                     coverUrl = coverPath,
                     description = epubBook.description,
-                    totalPages = epubBook.metadata.totalPages,
+                    totalPages = epubBook.chapters.size,
                     filePath = epubBook.filePath,
                     fileFormat = "epub",
                     addedDate = Date(),
@@ -233,37 +201,47 @@ class BookRepository @Inject constructor(
                 val bookId = bookDao.insertBook(bookEntity)
                 Log.d("BookRepository", "Книга сохранена с ID: $bookId")
 
-                // Сохраняем главы
-                epubBook.chapters.forEachIndexed { index, epubChapter ->
-                    val chapterEntity = ChapterEntity(
-                        bookId = bookId,
-                        chapterNumber = epubChapter.chapterNumber,
-                        title = epubChapter.title,
-                        content = epubChapter.content,
-                        wordCount = epubChapter.wordCount,
-                        durationMinutes = calculateReadingTime(epubChapter.wordCount)
-                    )
-                    chapterDao.insertChapter(chapterEntity)
-                }
+                // Сохраняем EPUB в память для быстрого доступа
+                loadedEpubBooks[bookId] = epubBook
 
+                // Сохраняем метаданные глав в БД
                 epubBook.chapters.forEachIndexed { index, epubChapter ->
                     Log.d("BookRepository", "Глава ${index + 1}: ${epubChapter.title}, " +
                             "символов: ${epubChapter.content.length}, " +
                             "слов: ${epubChapter.wordCount}")
 
-                    if (epubChapter.content.isBlank()) {
-                        Log.w("BookRepository", "Глава '${epubChapter.title}' имеет пустой текст!")
-                    }
-
+                    // Создаем сущность главы без контента
                     val chapterEntity = ChapterEntity.fromEpubChapter(bookId, epubChapter)
-                    chapterDao.insertChapter(chapterEntity)
+                    val chapterId = chapterDao.insertChapter(chapterEntity)
+                    Log.d("BookRepository", "✅ Сохранена глава ${epubChapter.chapterNumber} с ID: $chapterId")
+
+                    // Сохраняем контент первой главы для быстрого старта
+                    if (index == 0) {
+                        val contentPath = chapterContentRepo.saveChapterContent(
+                            bookId,
+                            epubChapter.chapterNumber,
+                            epubChapter.content
+                        )
+
+                        // Обновляем путь к контенту
+                        chapterDao.updateChapter(
+                            chapterEntity.copy(id = chapterId, contentPath = contentPath)
+                        )
+
+                        // Кешируем соседние главы
+                        chapterContentRepo.cacheAdjacentChapters(
+                            bookId,
+                            epubChapter.chapterNumber,
+                            epubBook.chapters
+                        )
+                    }
                 }
 
-                Log.d("BookRepository", "Добавлено ${epubBook.chapters.size} глав")
+                Log.d("BookRepository", "🎉 Импорт завершен. Добавлено ${epubBook.chapters.size} глав")
                 bookId
             } catch (e: Exception) {
                 Log.e("BookRepository", "Ошибка импорта EPUB: ${e.message}", e)
-                throw e // Пробрасываем исключение дальше
+                throw e
             }
         }
     }
@@ -272,15 +250,13 @@ class BookRepository @Inject constructor(
         return try {
             val fileName = "cover_${System.currentTimeMillis()}_${bookTitle.hashCode()}.jpg"
             val coversDir = File(context.filesDir, "covers")
-            coversDir.mkdirs() // Создаем папку, если не существует
+            coversDir.mkdirs()
 
             val coverFile = File(coversDir, fileName)
 
-            // Конвертируем ByteArray в Bitmap
             val bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.size)
                 ?: throw IllegalStateException("Не удалось декодировать обложку")
 
-            // Сохраняем сжатое изображение
             coverFile.outputStream().use { output ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 80, output)
             }
@@ -288,17 +264,15 @@ class BookRepository @Inject constructor(
             coverFile.absolutePath
         } catch (e: Exception) {
             Log.e("BookRepository", "Ошибка сохранения обложки: ${e.message}")
-            "" // Возвращаем пустую строку вместо null
+            ""
         }
     }
 
     private fun calculateReadingTime(wordCount: Int): Int {
-        // Средняя скорость чтения: 150-200 слов в минуту
-        // Используем 180 как среднее значение
         return if (wordCount > 0) {
             maxOf(1, (wordCount / 180.0).toInt())
         } else {
-            1 // Минимальное время для пустых глав
+            1
         }
     }
 
@@ -324,8 +298,6 @@ class BookRepository @Inject constructor(
     suspend fun doesBookExist(filePath: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                // Простой способ - проверка в базе данных
-                // В будущем можно добавить поле filePath в BookEntity для проверки
                 val allBooks = bookDao.getAllBooks().firstOrNull() ?: emptyList()
                 allBooks.any { it.filePath == filePath }
             } catch (e: Exception) {
@@ -334,28 +306,6 @@ class BookRepository @Inject constructor(
             }
         }
     }
-
-    // Метод для удаления импортированной книги
-    suspend fun deleteImportedBook(bookId: Long) {
-        withContext(Dispatchers.IO) {
-            try {
-                // Удаляем обложку, если есть
-                val book = bookDao.getBookById(bookId)
-                book?.coverUrl?.takeIf { it.isNotEmpty() }?.let { coverPath ->
-                    File(coverPath).delete()
-                }
-
-                // Удаляем книгу из базы (каскадно удалятся главы)
-                book?.let { bookDao.deleteBook(it) }
-
-                Log.d("BookRepository", "Удалена книга с ID: $bookId")
-            } catch (e: Exception) {
-                Log.e("BookRepository", "Ошибка удаления книги: ${e.message}")
-            }
-        }
-    }
-
-    // Дополнительные методы для BookRepository.kt
 
     // Получение информации об EPUB без импорта
     suspend fun getEpubBookInfo(filePath: String): EpubBook? {
@@ -371,42 +321,69 @@ class BookRepository @Inject constructor(
         }
     }
 
-    // Пакетный импорт нескольких EPUB
-    suspend fun importMultipleEpubBooks(epubBooks: List<EpubBook>): List<Long> {
-        return epubBooks.mapNotNull { epubBook ->
+    // Получение контента главы с ленивой загрузкой
+    suspend fun getChapterContent(bookId: Long, chapterNumber: Int): String {
+        return withContext(Dispatchers.IO) {
             try {
-                importEpubBook(epubBook)
-            } catch (e: Exception) {
-                Log.e("BookRepository", "Ошибка импорта ${epubBook.title}: ${e.message}")
-                null
-            }
-        }
-    }
+                // 1. Проверяем кеш в файловой системе
+                val cachedContent = chapterContentRepo.loadChapterContent(bookId, chapterNumber)
+                if (cachedContent != null) {
+                    Log.d("BookRepository", "Глава $chapterNumber загружена из кеша")
+                    return@withContext cachedContent
+                }
 
-    // Обновление прогресса чтения для EPUB
-    suspend fun updateEpubReadingProgress(bookId: Long, chapterNumber: Int, progressPercent: Int) {
-        withContext(Dispatchers.IO) {
-            try {
-                // Получаем книгу и обновляем, если она существует
-                bookDao.getBookById(bookId)?.let { book ->
-                    bookDao.updateReadingProgress(bookId, chapterNumber, progressPercent)
-
-                    // Помечаем главу как прочитанную, если прогресс > 90%
-                    if (progressPercent >= 90) {
-                        chapterDao.getChaptersByBookId(bookId).firstOrNull()?.let { chapters ->
-                            chapters.find { it.chapterNumber == chapterNumber }?.let { chapter ->
-                                chapterDao.updateReadStatus(chapter.id, true)
-                            }
-                        }
+                // 2. Если нет в кеше, получаем EPUB книгу
+                val epubBook = loadedEpubBooks[bookId] ?: run {
+                    // Если книги нет в памяти, загружаем из файла
+                    val bookEntity = bookDao.getBookById(bookId)
+                    bookEntity?.filePath?.let { filePath ->
+                        getEpubBookInfo(filePath)
+                    }?.also { epub ->
+                        loadedEpubBooks[bookId] = epub
                     }
                 }
+
+                if (epubBook == null) {
+                    throw Exception("EPUB книга не найдена")
+                }
+
+                // 3. Ищем нужную главу в EPUB
+                val chapter = epubBook.chapters.find { it.chapterNumber == chapterNumber }
+                    ?: throw Exception("Глава $chapterNumber не найдена")
+
+                // 4. Сохраняем в кеш для будущего использования
+                chapterContentRepo.saveChapterContent(bookId, chapterNumber, chapter.content)
+
+                // 5. Кешируем соседние главы
+                chapterContentRepo.cacheAdjacentChapters(bookId, chapterNumber, epubBook.chapters)
+
+                // 6. Обновляем путь в БД
+                val chapterEntity = chapterDao.getChapter(bookId, chapterNumber)
+                chapterEntity?.let {
+                    val contentPath = chapterContentRepo.saveChapterContent(bookId, chapterNumber, chapter.content)
+                    chapterDao.updateChapter(it.copy(contentPath = contentPath))
+                }
+
+                Log.d("BookRepository", "Глава $chapterNumber загружена из EPUB и сохранена в кеш")
+                chapter.content
             } catch (e: Exception) {
-                Log.e("BookRepository", "Ошибка обновления прогресса: ${e.message}")
+                Log.e("BookRepository", "Ошибка загрузки контента главы: ${e.message}")
+                throw Exception("Не удалось загрузить контент главы $chapterNumber: ${e.message}")
             }
         }
     }
 
-    // В BookRepository.kt добавьте:
+    // Получение информации о доступности главы в кеше
+    suspend fun isChapterCached(bookId: Long, chapterNumber: Int): Boolean {
+        return chapterContentRepo.hasChapterInCache(bookId, chapterNumber)
+    }
+
+    // Получение всех закешированных глав
+    suspend fun getCachedChapters(bookId: Long): List<Int> {
+        return chapterContentRepo.getCachedChapters(bookId)
+    }
+
+    // Получение глав для книги (только метаданные)
     fun getChaptersForBook(bookId: Long): Flow<List<ChapterEntity>> {
         return chapterDao.getChaptersByBookId(bookId)
     }
@@ -442,6 +419,30 @@ class BookRepository @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e("BookRepository", "Ошибка обновления прогресса: ${e.message}")
+            }
+        }
+    }
+
+    // Предзагрузка глав для быстрой навигации
+    suspend fun preloadChapters(bookId: Long, startChapter: Int, endChapter: Int) {
+        withContext(Dispatchers.IO) {
+            try {
+                val epubBook = loadedEpubBooks[bookId] ?: return@withContext
+
+                for (chapter in epubBook.chapters) {
+                    if (chapter.chapterNumber in startChapter..endChapter) {
+                        if (!chapterContentRepo.hasChapterInCache(bookId, chapter.chapterNumber)) {
+                            chapterContentRepo.saveChapterContent(
+                                bookId,
+                                chapter.chapterNumber,
+                                chapter.content
+                            )
+                            Log.d("BookRepository", "Предзагружена глава ${chapter.chapterNumber}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка предзагрузки глав: ${e.message}")
             }
         }
     }

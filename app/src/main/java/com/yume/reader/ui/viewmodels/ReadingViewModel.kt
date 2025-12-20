@@ -1,6 +1,7 @@
 package com.yume.reader.ui.viewmodels
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,7 @@ import com.yume.reader.data.repository.BookRepository
 import com.yume.reader.data.repository.ReadingProgressRepository
 import com.yume.reader.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -17,6 +19,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import javax.inject.Inject
 
+@RequiresApi(Build.VERSION_CODES.O)
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ReadingViewModel @Inject constructor(
     private val bookRepository: BookRepository,
@@ -31,7 +35,7 @@ class ReadingViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // Главы
+    // Главы (только метаданные)
     val chapters: StateFlow<List<com.yume.reader.data.local.entity.ChapterEntity>> =
         _currentBookId.flatMapLatest { bookId ->
             if (bookId != null) {
@@ -45,9 +49,13 @@ class ReadingViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    // Текущая глава
+    // Текущая глава (номер)
     private val _currentChapter = MutableStateFlow(1)
     val currentChapter: StateFlow<Int> = _currentChapter.asStateFlow()
+
+    // Контент текущей главы
+    private val _currentContent = MutableStateFlow<String?>(null)
+    val currentContent: StateFlow<String?> = _currentContent.asStateFlow()
 
     // Прогресс чтения (0-1)
     private val _readingProgress = MutableStateFlow(0f)
@@ -68,6 +76,8 @@ class ReadingViewModel @Inject constructor(
                 if (currentBookId != null) {
                     updateReadingProgress()
                     saveProgress()
+                    // При смене главы загружаем ее контент
+                    loadChapterContent(chapter)
                 }
             }
         }
@@ -89,6 +99,9 @@ class ReadingViewModel @Inject constructor(
             loadTextSettings(bookId)
 
             _isLoading.value = false
+
+            // Загружаем контент первой главы
+            loadChapterContent(_currentChapter.value)
         }
     }
 
@@ -109,6 +122,37 @@ class ReadingViewModel @Inject constructor(
             .collect { settings ->
                 _textSettings.value = settings
             }
+    }
+
+    // Метод для загрузки контента главы
+    private fun loadChapterContent(chapterNumber: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                currentBookId?.let { bookId ->
+                    val content = bookRepository.getChapterContent(bookId, chapterNumber)
+                    _currentContent.value = content
+
+                    // Предзагружаем следующие главы для плавной навигации
+                    if (chapterNumber < chapters.value.size) {
+                        val start = chapterNumber + 1
+                        val end = minOf(chapterNumber + 3, chapters.value.size)
+                        bookRepository.preloadChapters(bookId, start, end)
+                    }
+                }
+            } catch (e: Exception) {
+                _currentContent.value = """
+                    Ошибка загрузки главы $chapterNumber
+                    
+                    ${e.message}
+                    
+                    Попробуйте перейти к другой главе или перезагрузить книгу.
+                """.trimIndent()
+                Log.e("ReadingViewModel", "Ошибка загрузки контента: ${e.message}")
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 
     fun nextChapter() {
@@ -156,7 +200,6 @@ class ReadingViewModel @Inject constructor(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    // В методе saveProgress добавляем сохранение в BookEntity
     private fun saveProgress() {
         currentBookId?.let { bookId ->
             viewModelScope.launch {
@@ -168,8 +211,8 @@ class ReadingViewModel @Inject constructor(
                     totalChapters = chapters.value.size
                 )
 
-                // Сохраняем в таблице прогресса чтения через репозиторий
-                readingProgressRepository.saveReadingProgress(progress) // Используем saveReadingProgress
+                // Сохраняем в таблице прогресса чтения
+                readingProgressRepository.saveReadingProgress(progress)
 
                 // Также обновляем в таблице книг
                 val totalChapters = chapters.value.size
@@ -200,10 +243,6 @@ class ReadingViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    fun getCurrentChapterText(): String {
-        return chapters.value.getOrNull(_currentChapter.value - 1)?.content ?: ""
     }
 
     // Вспомогательные методы для UI
@@ -260,6 +299,4 @@ class ReadingViewModel @Inject constructor(
         saveProgress()
         autoSaveJob?.cancel()
     }
-
-
 }

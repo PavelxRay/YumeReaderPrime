@@ -1,4 +1,3 @@
-// ui/viewmodels/BookDetailsViewModel.kt
 package com.yume.reader.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
@@ -9,10 +8,12 @@ import com.yume.reader.data.repository.ReadingProgressRepository
 import com.yume.reader.domain.models.Book
 import com.yume.reader.domain.models.toDomain
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class BookDetailsViewModel @Inject constructor(
     private val bookRepository: BookRepository,
@@ -151,7 +152,7 @@ class BookDetailsViewModel @Inject constructor(
         }
     }
 
-    // Получение текущей главы (если есть прогресс чтения)
+    // Получение текущей главы из прогресса чтения
     val currentChapter: StateFlow<Int> = readingProgress.map { progress ->
         progress?.currentChapter ?: 1
     }.stateIn(
@@ -159,4 +160,21 @@ class BookDetailsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = 1
     )
+
+    // Проверка доступности главы в кеше
+    suspend fun isChapterCached(chapterNumber: Int): Boolean {
+        return _bookId.value?.let { bookId ->
+            bookRepository.isChapterCached(bookId, chapterNumber)
+        } ?: false
+    }
+
+    // Получение информации о кешированных главах
+    suspend fun getCachedChaptersInfo(): Map<Int, Boolean> {
+        return _bookId.value?.let { bookId ->
+            val cached = bookRepository.getCachedChapters(bookId)
+            chapters.value.associate { chapter ->
+                chapter.chapterNumber to cached.contains(chapter.chapterNumber)
+            }
+        } ?: emptyMap()
+    }
 }

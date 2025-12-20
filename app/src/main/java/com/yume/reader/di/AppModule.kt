@@ -1,4 +1,3 @@
-// di/AppModule.kt
 package com.yume.reader.di
 
 import android.content.Context
@@ -53,9 +52,16 @@ object AppModule {
     fun provideBookRepository(
         bookDao: BookDao,
         chapterDao: ChapterDao,
-        readingProgressDao: ReadingProgressDao, // Добавляем
+        readingProgressDao: ReadingProgressDao,
+        chapterContentRepo: ChapterContentRepository, // Добавляем
         @ApplicationContext context: Context
-    ): BookRepository = BookRepository(bookDao, chapterDao, readingProgressDao, context)
+    ): BookRepository = BookRepository(bookDao, chapterDao, readingProgressDao, chapterContentRepo, context)
+
+    @Provides
+    @Singleton
+    fun provideChapterContentRepository(
+        @ApplicationContext context: Context
+    ): ChapterContentRepository = ChapterContentRepository(context)
 
     @Provides
     @Singleton
@@ -77,6 +83,8 @@ object AppModule {
     @Singleton
     fun provideEpubParser(@ApplicationContext context: Context): EpubParser = EpubParser(context)
 
+    // Дополнительные ViewModel провайдеры
+    @Provides
     fun provideBookDetailsViewModel(
         bookRepository: BookRepository,
         chapterRepository: ChapterRepository,

@@ -27,8 +27,8 @@ data class ChapterEntity(
     @ColumnInfo(name = "title")
     val title: String,
 
-    @ColumnInfo(name = "content")
-    val content: String,
+    @ColumnInfo(name = "content_path")
+    val contentPath: String? = null, // Путь к файлу с контентом
 
     @ColumnInfo(name = "word_count")
     val wordCount: Int = 0,
@@ -45,7 +45,7 @@ data class ChapterEntity(
                 bookId = bookId,
                 chapterNumber = epubChapter.chapterNumber,
                 title = epubChapter.title,
-                content = epubChapter.content,
+                contentPath = null, // Будет установлен позже при сохранении контента
                 wordCount = epubChapter.wordCount,
                 durationMinutes = calculateReadingTime(epubChapter.wordCount),
                 isRead = false
@@ -53,7 +53,7 @@ data class ChapterEntity(
         }
 
         private fun calculateReadingTime(wordCount: Int): Int {
-            return kotlin.math.max(1, (wordCount / 180.0).toInt())
+            return maxOf(1, (wordCount / 180.0).toInt())
         }
     }
 }

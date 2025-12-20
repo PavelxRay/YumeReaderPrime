@@ -1,12 +1,13 @@
 package com.yume.reader.ui.screens
 
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +24,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -33,7 +33,7 @@ import com.yume.reader.data.models.TextSettings
 import com.yume.reader.ui.viewmodels.ReadingViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalUnitApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingScreen(
     navController: NavController,
@@ -48,35 +48,22 @@ fun ReadingScreen(
     }
 
     // Состояния
-    var isLoading by remember { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
     var showProgressIndicator by remember { mutableStateOf(true) }
     var lastTapPosition by remember { mutableStateOf(Offset.Zero) }
 
     // Настройки текста
-    val textSettings by viewModel.textSettings.collectAsState(initial = TextSettings())
+    val textSettings by viewModel.textSettings.collectAsState()
 
     // Данные из ViewModel
     val chapters by viewModel.chapters.collectAsState()
     val currentChapterIndex by viewModel.currentChapter.collectAsState()
     val readingProgress by viewModel.readingProgress.collectAsState()
-    val isLoadingState by viewModel.isLoading.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val currentContent by viewModel.currentContent.collectAsState()
 
     val currentChapter = remember(chapters, currentChapterIndex) {
         chapters.getOrNull(currentChapterIndex - 1)
-    }
-
-    // Обновляем локальное состояние загрузки
-    LaunchedEffect(isLoadingState, chapters) {
-        isLoading = isLoadingState
-    }
-
-    // Автосохранение прогресса при прокрутке
-    val lazyListState = rememberLazyListState()
-    LaunchedEffect(lazyListState.firstVisibleItemIndex) {
-        if (lazyListState.isScrollInProgress) {
-            viewModel.saveReadingProgress()
-        }
     }
 
     // Показать состояние загрузки
@@ -273,8 +260,8 @@ fun ReadingScreen(
                 }
         ) {
             // Основной контент
-            val chapterContent = remember(currentChapter) {
-                currentChapter?.content?.let { content ->
+            val chapterContent = remember(currentContent) {
+                currentContent?.let { content ->
                     content.split("\n\n", "\n")
                         .map { it.trim() }
                         .filter { it.isNotBlank() && it.length > 3 }
@@ -283,29 +270,47 @@ fun ReadingScreen(
             }
 
             if (chapterContent.isEmpty()) {
-                // Состояние "пустая глава"
+                // Состояние "пустая глава" или загрузка
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "Текст главы отсутствует",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = textColor
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Попробуйте перейти к следующей главе",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.7f)
-                        )
+                    if (currentContent == null) {
+                        // Загрузка
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Загрузка главы...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = textColor
+                            )
+                        }
+                    } else {
+                        // Пустая глава
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "Текст главы отсутствует",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = textColor
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Попробуйте перейти к следующей главе",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             } else {
+                val lazyListState = rememberLazyListState()
                 LazyColumn(
                     state = lazyListState,
                     modifier = Modifier
@@ -317,7 +322,7 @@ fun ReadingScreen(
                             bottom = paddingValues.calculateBottomPadding()
                         )
                 ) {
-                    items(chapterContent) { paragraph ->
+                    itemsIndexed(chapterContent) { index, paragraph ->
                         Text(
                             text = paragraph,
                             modifier = Modifier.padding(
@@ -330,6 +335,13 @@ fun ReadingScreen(
                             ),
                             color = textColor
                         )
+                    }
+                }
+
+                // Автосохранение прогресса при прокрутке
+                LaunchedEffect(lazyListState.firstVisibleItemIndex) {
+                    if (lazyListState.isScrollInProgress) {
+                        viewModel.saveReadingProgress()
                     }
                 }
             }

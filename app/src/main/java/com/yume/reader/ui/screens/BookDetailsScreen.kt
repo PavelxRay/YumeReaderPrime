@@ -97,7 +97,9 @@ fun BookDetailsScreen(
                     navController.navigate("reader/${book!!.id}")
                 },
                 onContinueClick = {
-                    navController.navigate("reader/${book!!.id}?chapter=$currentChapter")
+                    // Продолжаем с сохраненной главы
+                    val continueChapter = readingProgress?.currentChapter ?: 1
+                    navController.navigate("reader/${book!!.id}?chapter=$continueChapter")
                 }
             )
 
@@ -109,8 +111,7 @@ fun BookDetailsScreen(
                 onSearchClick = { showSearchBar = true }
             )
 
-            // Разделитель
-            Divider(
+            HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 thickness = 1.dp,
                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
@@ -122,6 +123,7 @@ fun BookDetailsScreen(
                     chapters = chapters,
                     currentChapter = currentChapter,
                     onChapterClick = { chapter ->
+                        // Теперь точно переходим к указанной главе
                         navController.navigate("reader/${book!!.id}?chapter=${chapter.chapterNumber}")
                     },
                     onToggleRead = { chapterId, isRead ->
