@@ -93,12 +93,8 @@ fun BookDetailsScreen(
                 totalChapters = chapters.size,
                 totalReadingTime = totalReadingTime,
                 progress = readingProgress?.progressPercent ?: 0f,
-                onReadClick = {
-                    // Начинаем с первой главы
-                    navController.navigate("reader/${book!!.id}?chapter=1")
-                },
                 onContinueClick = {
-                    // Продолжаем с сохраненной главы
+                    // Продолжаем с сохраненной главы или начинаем с первой
                     val continueChapter = readingProgress?.currentChapter ?: 1
                     navController.navigate("reader/${book!!.id}?chapter=$continueChapter")
                 }
@@ -108,14 +104,12 @@ fun BookDetailsScreen(
             FilterSection(
                 selectedFilter = selectedFilter,
                 onFilterChange = { viewModel.updateFilter(it) },
-                showSearchButton = !showSearchBar && searchQuery.isEmpty(),
-                onSearchClick = { showSearchBar = true }
             )
 
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 thickness = 1.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f) // Увеличил альфа для лучшей видимости
             )
 
             // Список глав
@@ -153,6 +147,130 @@ fun BookDetailsScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun BookHeader(
+    book: com.yume.reader.domain.models.Book,
+    totalChapters: Int,
+    totalReadingTime: String,
+    progress: Float,
+    onContinueClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Название и автор
+        Column {
+            Text(
+                text = book.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = book.author,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // Прогресс чтения
+        if (progress > 0) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Прогресс",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+        }
+
+        // Статистика
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            StatItem(
+                value = "$totalChapters глав",
+                label = "Всего глав",
+                modifier = Modifier.weight(1f)
+            )
+            StatItem(
+                value = totalReadingTime,
+                label = "Время чтения",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Кнопка действия
+        Button(
+            onClick = onContinueClick,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = true, // Кнопка всегда активна
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Text("Продолжить чтение")
+        }
+    }
+}
+
+@Composable
+private fun FilterSection(
+    selectedFilter: String,
+    onFilterChange: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Фильтры
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val filters = listOf("По порядку", "Прочитанно", "Непрочитанно") // Исправлены опечатки
+
+            filters.forEach { filter ->
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = { onFilterChange(filter) },
+                    label = { Text(filter) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // Отступ снизу
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -245,113 +363,6 @@ private fun SearchTopBar(
         }
     }
 }
-
-@Composable
-private fun BookHeader(
-    book: com.yume.reader.domain.models.Book,
-    totalChapters: Int,
-    totalReadingTime: String,
-    progress: Float,
-    onReadClick: () -> Unit,
-    onContinueClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Название и автор
-        Column {
-            Text(
-                text = book.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = book.author,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // Прогресс чтения
-        if (progress > 0) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Прогресс",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${(progress * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            }
-        }
-
-        // Статистика
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            StatItem(
-                value = "$totalChapters глав",
-                label = "Всего глав",
-                modifier = Modifier.weight(1f)
-            )
-            StatItem(
-                value = totalReadingTime,
-                label = "Время чтения",
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Кнопки действий
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = onContinueClick,
-                modifier = Modifier.weight(1f),
-                enabled = progress > 0,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Text("Продолжить чтение")
-            }
-            Button(
-                onClick = onReadClick,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary
-                )
-            ) {
-                Text("Начать с начала")
-            }
-        }
-    }
-}
-
 @Composable
 private fun StatItem(
     value: String,
@@ -375,45 +386,6 @@ private fun StatItem(
         )
     }
 }
-
-@Composable
-private fun FilterSection(
-    selectedFilter: String,
-    onFilterChange: (String) -> Unit,
-    showSearchButton: Boolean,
-    onSearchClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Фильтры
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val filters = listOf("По порядку", "Прочитанные", "Непрочитанные")
-
-            filters.forEach { filter ->
-                FilterChip(
-                    selected = selectedFilter == filter,
-                    onClick = { onFilterChange(filter) },
-                    label = { Text(filter) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            if (showSearchButton) {
-                IconButton(onClick = onSearchClick) {
-                    Icon(Icons.Default.Search, contentDescription = "Поиск")
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun ChaptersList(
     chapters: List<com.yume.reader.data.local.entity.ChapterEntity>,
