@@ -10,17 +10,15 @@ data class TextSettings(
     val fontSize: Float = 16f,
     val lineHeight: Float = 1.5f,
     val fontFamily: String = "Georgia",
-    val theme: String = "light",
+    val theme: String = "system", // Для глобальных: light, dark, system
     val brightness: Float = 1f,
     val margins: Float = 16f,
     val paragraphSpacing: Float = 8f
-)
-
-// или для общих настроек
-@Entity(tableName = "user_preferences")
-data class UserPreferences(
-    @PrimaryKey val id: Int = 0,
-    val textSettings: TextSettings = TextSettings(),
-    val autoSaveProgress: Boolean = true,
-    val swipeGestures: Boolean = true
-)
+) {
+    // Функция для создания настроек по умолчанию для книги
+    companion object {
+        fun defaultForBook(bookId: Long): TextSettings {
+            return TextSettings(bookId = bookId)
+        }
+    }
+}

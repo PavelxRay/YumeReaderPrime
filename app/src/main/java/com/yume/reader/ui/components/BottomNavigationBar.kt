@@ -5,6 +5,7 @@ import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -38,9 +39,9 @@ fun BottomNavigationBar(
             icon = Icons.Outlined.Favorite
         ),
         BottomNavItem(
-            route = "profile",
-            label = "Профиль",
-            icon = Icons.Outlined.Person
+            route = "globSettings",
+            label = "Настройки",
+            icon = Icons.Outlined.Settings
         )
     )
 

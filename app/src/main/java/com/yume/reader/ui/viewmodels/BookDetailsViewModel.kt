@@ -55,7 +55,8 @@ class BookDetailsViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val _selectedFilter = MutableStateFlow("По порядку")
+    // ИЗМЕНЕНО: Начальное значение фильтра - "Все"
+    private val _selectedFilter = MutableStateFlow("Все")
     val selectedFilter: StateFlow<String> = _selectedFilter.asStateFlow()
 
     // Прогресс чтения
@@ -131,11 +132,11 @@ class BookDetailsViewModel @Inject constructor(
                 }
             }
 
-            // Применяем фильтр
+            // ИЗМЕНЕНО: Применяем фильтр с правильными названиями
             result = when (filter) {
-                "Прочитанные" -> result.filter { it.isRead }
-                "Непрочитанные" -> result.filter { !it.isRead }
-                else -> result // "По порядку"
+                "Прочитанно" -> result.filter { it.isRead }
+                "Непрочитанно" -> result.filter { !it.isRead }
+                else -> result // "Все"
             }
 
             result

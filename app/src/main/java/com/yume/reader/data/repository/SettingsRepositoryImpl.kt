@@ -23,9 +23,13 @@ class SettingsRepositoryImpl @Inject constructor(
         textSettingsDao.insertTextSettings(settings.copy(bookId = bookId))
     }
 
-    override suspend fun getGlobalSettings(): Flow<TextSettings> {
+    override fun getGlobalSettings(): Flow<TextSettings> {
         return textSettingsDao.getTextSettings(-1).map { settings ->
             settings ?: TextSettings(bookId = -1)
         }
+    }
+
+    override suspend fun saveGlobalSettings(settings: TextSettings) {
+        textSettingsDao.insertTextSettings(settings.copy(bookId = -1))
     }
 }

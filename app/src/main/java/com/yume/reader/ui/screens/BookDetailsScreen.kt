@@ -399,14 +399,13 @@ private fun ChaptersList(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
     ) {
         itemsIndexed(chapters) { index, chapter ->
+            // Убраны все обработчики кликов
             ChapterItem(
                 chapterNumber = chapter.chapterNumber,
                 title = chapter.title,
                 durationMinutes = chapter.durationMinutes,
                 isRead = chapter.isRead,
                 isCurrent = chapter.chapterNumber == currentChapter,
-                onChapterClick = { onChapterClick(chapter) },
-                onToggleRead = { onToggleRead(chapter.id, chapter.isRead) },
                 modifier = Modifier.fillMaxWidth()
             )
         }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.*
 import java.time.LocalDateTime
 import javax.inject.Inject
 
+@RequiresApi(Build.VERSION_CODES.O)
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReadingViewModel @Inject constructor(
@@ -136,14 +137,18 @@ class ReadingViewModel @Inject constructor(
 
     private suspend fun loadTextSettings(bookId: Long) {
         try {
+            // ЗАГРУЖАЕМ НАСТРОЙКИ КОНКРЕТНОЙ КНИГИ (bookId > 0)
             settingsRepository.getTextSettings(bookId)
                 .firstOrNull()
                 ?.let { settings ->
                     _textSettings.value = settings
-                }
+                } ?: run {
+                // Если нет настроек для книги, создаем дефолтные
+                _textSettings.value = TextSettings.defaultForBook(bookId)
+            }
         } catch (e: Exception) {
-            // Используем настройки по умолчанию
-            _textSettings.value = TextSettings()
+            // Используем настройки по умолчанию для книги
+            _textSettings.value = TextSettings.defaultForBook(bookId)
         }
     }
 

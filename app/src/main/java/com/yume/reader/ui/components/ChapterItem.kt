@@ -1,6 +1,6 @@
+// ui/components/ChapterItem.kt (обновленная версия)
 package com.yume.reader.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -21,14 +21,11 @@ fun ChapterItem(
     durationMinutes: Int,
     isRead: Boolean,
     isCurrent: Boolean,
-    onChapterClick: () -> Unit,
-    onToggleRead: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier
-            .fillMaxWidth()
-            .clickable { onChapterClick() },
+            .fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
@@ -54,25 +51,14 @@ fun ChapterItem(
                     fontWeight = FontWeight.Bold
                 )
 
-                // Индикатор прочтения
-                IconButton(
-                    onClick = {
-                        // Отменяем всплытие события
-                        onToggleRead()
-                    },
-                    modifier = Modifier.size(24.dp),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color.Transparent
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (isRead) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                        contentDescription = if (isRead) "Прочитано" else "Не прочитано",
-                        tint = if (isRead) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                // Только иконка статуса (без клика)
+                Icon(
+                    imageVector = if (isRead) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                    contentDescription = if (isRead) "Прочитано" else "Не прочитано",
+                    tint = if (isRead) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
             // Заголовок главы

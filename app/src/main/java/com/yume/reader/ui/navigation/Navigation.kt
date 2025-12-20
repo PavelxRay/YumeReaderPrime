@@ -1,6 +1,8 @@
 // ui/navigation/YumeReaderNavigation.kt (обновляем)
 package com.yume.reader.ui.navigation
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,6 +19,7 @@ import androidx.navigation.navArgument
 import com.yume.reader.ui.screens.*
 import com.yume.reader.ui.screens.BookDetailsScreen
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun YumeReaderNavigation() {
     val navController = rememberNavController()
@@ -27,7 +30,7 @@ fun YumeReaderNavigation() {
 
     // Определяем, нужно ли показывать нижнюю панель навигации
     showBottomBar = when (currentRoute) {
-        "library", "reading_now", "favorites", "profile" -> true
+        "library", "reading_now", "favorites", "globSettings" -> true
         else -> false
     }
 
@@ -57,8 +60,8 @@ fun YumeReaderNavigation() {
             composable("favorites") {
                 FavoritesScreen(navController = navController)
             }
-            composable("profile") {
-                ProfileScreen(navController = navController)
+            composable("globSettings") {
+                SettingsScreen(navController = navController)
             }
 
             composable(
@@ -84,10 +87,6 @@ fun YumeReaderNavigation() {
                     navController = navController,
                     bookId = bookId
                 )
-            }
-
-            composable("add_book") {
-                // AddBookScreen(navController = navController)
             }
 
             composable("import_epub") {

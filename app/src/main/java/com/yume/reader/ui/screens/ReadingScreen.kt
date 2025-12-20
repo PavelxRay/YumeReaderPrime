@@ -409,12 +409,18 @@ fun SettingsOverlay(
 ) {
     Column(
         modifier = modifier
-            .padding(16.dp)
+            .fillMaxWidth()
+            .fillMaxHeight()
+            .background(
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+            )
             .verticalScroll(rememberScrollState())
     ) {
-        // Заголовок
+        // Заголовок с кнопкой закрытия
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -427,8 +433,6 @@ fun SettingsOverlay(
                 Icon(Icons.Default.Close, contentDescription = "Закрыть")
             }
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         // Размер шрифта
         SettingSection(title = "Размер шрифта") {
@@ -531,24 +535,6 @@ fun SettingsOverlay(
             }
         }
 
-        // Яркость
-        SettingSection(title = "Яркость экрана") {
-            Slider(
-                value = textSettings.brightness,
-                onValueChange = { newValue ->
-                    onSettingsUpdate(textSettings.copy(brightness = newValue))
-                },
-                valueRange = 0.5f..1f,
-                steps = 5,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = "${(textSettings.brightness * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.align(Alignment.End)
-            )
-        }
-
         // Отступы
         SettingSection(title = "Отступы страницы") {
             Slider(
@@ -574,13 +560,17 @@ fun SettingsOverlay(
             onClick = {
                 onSettingsUpdate(TextSettings())
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
             )
         ) {
             Text("Сбросить настройки")
         }
+
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 

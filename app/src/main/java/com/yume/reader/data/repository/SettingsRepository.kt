@@ -7,5 +7,6 @@ import kotlinx.coroutines.flow.Flow
 interface SettingsRepository {
     fun getTextSettings(bookId: Long): Flow<TextSettings>
     suspend fun updateTextSettings(bookId: Long, settings: TextSettings)
-    suspend fun getGlobalSettings(): Flow<TextSettings>
+    fun getGlobalSettings(): Flow<TextSettings>
+    suspend fun saveGlobalSettings(settings: TextSettings)
 }
