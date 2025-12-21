@@ -362,7 +362,7 @@ fun StatisticCard(
 
     // Цвет заголовка
     val titleColor = if (isDarkTheme) {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 1.1f)
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
