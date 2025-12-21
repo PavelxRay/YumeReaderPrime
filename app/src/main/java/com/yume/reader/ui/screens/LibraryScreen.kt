@@ -2,6 +2,7 @@ package com.yume.reader.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -229,7 +231,7 @@ fun LibraryScreen(
                     StatisticCard(
                         title = "Прочитано книг",
                         value = (statistics["finishedBooks"] as? Int ?: 0).toString(),
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -245,7 +247,7 @@ fun LibraryScreen(
                     StatisticCard(
                         title = "Прочитано глав",
                         value = (statistics["totalChapters"] as? Int ?: 0).toString(),
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -328,10 +330,51 @@ fun StatisticCard(
     color: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
 ) {
+    val isDarkTheme = isSystemInDarkTheme()
+
+    // Для темной темы используем более светлый и контрастный фон
+    val backgroundColor = if (isDarkTheme) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    // Для темной темы делаем круг более контрастным
+    val circleBackgroundAlpha = if (isDarkTheme) 0.25f else 0.2f
+    val circleBackgroundColor = if (isDarkTheme) {
+        color.copy(alpha = circleBackgroundAlpha)
+    } else {
+        color.copy(alpha = circleBackgroundAlpha)
+    }
+
+    // Для текста в круге в темной теме используем более яркую версию цвета
+    val circleTextColor = if (isDarkTheme) {
+        // Делаем цвет ярче для темной темы
+        when (color) {
+            MaterialTheme.colorScheme.primary -> MaterialTheme.colorScheme.primary.copy(alpha = 1f)
+            MaterialTheme.colorScheme.secondary -> MaterialTheme.colorScheme.secondary.copy(alpha = 1f)
+            MaterialTheme.colorScheme.tertiary -> MaterialTheme.colorScheme.tertiary.copy(alpha = 1f)
+            else -> color
+        }
+    } else {
+        color
+    }
+
+    // Цвет заголовка
+    val titleColor = if (isDarkTheme) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 1.1f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = backgroundColor,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isDarkTheme) 3.dp else 1.dp
         )
     ) {
         Column(
@@ -340,23 +383,26 @@ fun StatisticCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(40.dp) // Увеличил размер круга для лучшей видимости
                     .clip(CircleShape)
-                    .background(color.copy(alpha = 0.2f)),
+                    .background(circleBackgroundColor),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = value,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = color
+                    color = circleTextColor
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp)) // Увеличил отступ
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = if (isDarkTheme) FontWeight.Medium else FontWeight.Normal
+                ),
+                color = titleColor,
+                textAlign = TextAlign.Center
             )
         }
     }

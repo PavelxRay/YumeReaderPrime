@@ -27,8 +27,10 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.yume.reader.data.models.TextSettings
@@ -69,6 +71,28 @@ fun ReadingScreen(
         chapters.getOrNull(currentChapterIndex - 1)
     }
 
+    // Определяем фон в зависимости от темы
+    val backgroundColor = when (textSettings.theme) {
+        "dark" -> Color(0xFF121212)
+        "sepia" -> Color(0xFFF8F0E3)
+        "contrast" -> Color.Black
+        else -> Color.White
+    }
+
+    val textColor = when (textSettings.theme) {
+        "dark" -> Color.White
+        "sepia" -> Color(0xFF5C4B37)
+        "contrast" -> Color(0xFF00FF00) // Зеленый для контраста
+        else -> Color.Black
+    }
+
+    val fontFamily = when (textSettings.fontFamily) {
+        "Georgia" -> FontFamily.Serif
+        "Arial" -> FontFamily.SansSerif
+        "Courier" -> FontFamily.Monospace
+        else -> FontFamily.Default
+    }
+
     // Показать состояние загрузки
     if (isLoading || chapters.isEmpty()) {
         Box(
@@ -91,28 +115,6 @@ fun ReadingScreen(
             }
         }
         return
-    }
-
-    // Определяем фон в зависимости от темы
-    val backgroundColor = when (textSettings.theme) {
-        "dark" -> Color(0xFF121212)
-        "sepia" -> Color(0xFFF8F0E3)
-        "contrast" -> Color.Black
-        else -> Color.White
-    }
-
-    val textColor = when (textSettings.theme) {
-        "dark" -> Color.White
-        "sepia" -> Color(0xFF5C4B37)
-        "contrast" -> Color(0xFF00FF00) // Зеленый для контраста
-        else -> Color.Black
-    }
-
-    val fontFamily = when (textSettings.fontFamily) {
-        "Georgia" -> FontFamily.Serif
-        "Arial" -> FontFamily.SansSerif
-        "Courier" -> FontFamily.Monospace
-        else -> FontFamily.Default
     }
 
     Scaffold(
@@ -152,7 +154,7 @@ fun ReadingScreen(
                     actions = {
                         // Кнопка настроек
                         IconButton(
-                            onClick = { showSettings = !showSettings },
+                            onClick = { showSettings = true },
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
                             Icon(
@@ -161,25 +163,7 @@ fun ReadingScreen(
                                 tint = textColor
                             )
                         }
-
-                        // Процент прочтения
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primary,
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${(readingProgress * 100).toInt()}%",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White
-                            )
-                        }
                     },
-                    // ВАЖНО: Добавляем цвета для TopAppBar
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = backgroundColor,
                         titleContentColor = textColor,
@@ -349,35 +333,6 @@ fun ReadingScreen(
                 }
             }
 
-            // Оверлей настроек
-            AnimatedVisibility(
-                visible = showSettings,
-                enter = fadeIn() + slideInHorizontally(
-                    initialOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(durationMillis = 300)
-                ),
-                exit = fadeOut() + slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(durationMillis = 300)
-                )
-            ) {
-                SettingsOverlay(
-                    textSettings = textSettings,
-                    onSettingsUpdate = { newSettings ->
-                        viewModel.updateTextSettings(newSettings)
-                    },
-                    onClose = { showSettings = false },
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(LocalConfiguration.current.screenWidthDp.dp * 0.85f)
-                        .align(Alignment.CenterEnd)
-                        .background(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                            RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
-                        )
-                )
-            }
-
             // Быстрое меню при долгом нажатии
             if (lastTapPosition != Offset.Zero && showSettings.not()) {
                 QuickSettingsMenu(
@@ -396,205 +351,349 @@ fun ReadingScreen(
                     onDismiss = { lastTapPosition = Offset.Zero }
                 )
             }
+
+            // Диалог настроек
+            if (showSettings) {
+                Dialog(
+                    onDismissRequest = { showSettings = false }
+                ) {
+                    CompactSettingsDialog(
+                        textSettings = textSettings,
+                        onSettingsUpdate = { newSettings ->
+                            viewModel.updateTextSettings(newSettings)
+                        },
+                        onClose = { showSettings = false }
+                    )
+                }
+            }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsOverlay(
+fun CompactSettingsDialog(
     textSettings: TextSettings,
     onSettingsUpdate: (TextSettings) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Card(
         modifier = modifier
-            .fillMaxWidth()
-            .fillMaxHeight()
-            .background(
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-            )
-            .verticalScroll(rememberScrollState())
+            .fillMaxWidth(0.95f)
+            .fillMaxHeight(0.8f),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        )
     ) {
-        // Заголовок с кнопкой закрытия
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
-            Text(
-                text = "Настройки чтения",
-                style = MaterialTheme.typography.titleLarge,
-                fontSize = 20.sp
-            )
-            IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Закрыть")
-            }
-        }
-
-        // Размер шрифта
-        SettingSection(title = "Размер шрифта") {
-            Row(
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(
-                    onClick = {
-                        onSettingsUpdate(textSettings.copy(fontSize = textSettings.fontSize - 2))
-                    },
-                    enabled = textSettings.fontSize > 12
-                ) {
-                    Icon(Icons.Default.Remove, contentDescription = "Уменьшить")
-                }
-
-                Text(
-                    text = "${textSettings.fontSize.toInt()}sp",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
-                IconButton(
-                    onClick = {
-                        onSettingsUpdate(textSettings.copy(fontSize = textSettings.fontSize + 2))
-                    },
-                    enabled = textSettings.fontSize < 30
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Увеличить")
-                }
-            }
-        }
-
-        // Цветовая тема
-        SettingSection(title = "Цветовая тема") {
-            val themes = listOf("Светлая", "Тёмная", "Сепия", "Контраст")
-            val themeValues = listOf("light", "dark", "sepia", "contrast")
-
+            // Заголовок с кнопкой закрытия
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                themeValues.forEachIndexed { index, theme ->
-                    FilterChip(
-                        selected = textSettings.theme == theme,
-                        onClick = {
-                            onSettingsUpdate(textSettings.copy(theme = theme))
-                        },
-                        label = { Text(themes[index]) },
-                        modifier = Modifier.weight(1f)
+                Text(
+                    text = "Настройки чтения",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Закрыть")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Содержимое настроек со скроллом
+            Box(
+                modifier = Modifier.weight(1f)
+            ) {
+                val scrollState = rememberScrollState()
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                        .padding(vertical = 8.dp)
+                ) {
+                    // Размер шрифта
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.TextFields,
+                            contentDescription = "Размер шрифта",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Размер шрифта",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${textSettings.fontSize.toInt()}sp",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (textSettings.fontSize > 12) {
+                                    onSettingsUpdate(textSettings.copy(fontSize = textSettings.fontSize - 2))
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = textSettings.fontSize > 12
+                        ) {
+                            Text("A-")
+                        }
+
+                        Slider(
+                            value = textSettings.fontSize,
+                            onValueChange = { onSettingsUpdate(textSettings.copy(fontSize = it)) },
+                            valueRange = 12f..30f,
+                            modifier = Modifier.weight(3f)
+                        )
+
+                        IconButton(
+                            onClick = {
+                                if (textSettings.fontSize < 30) {
+                                    onSettingsUpdate(textSettings.copy(fontSize = textSettings.fontSize + 2))
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = textSettings.fontSize < 30
+                        ) {
+                            Text("A+")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Цветовая тема
+                    Text(
+                        text = "Цветовая тема",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    if (index < themes.lastIndex) {
-                        Spacer(modifier = Modifier.width(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val themes = listOf(
+                            "light" to "Светлая",
+                            "dark" to "Тёмная",
+                            "sepia" to "Сепия",
+                            "contrast" to "Контраст"
+                        )
+
+                        themes.forEach { (themeValue, themeName) ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                val isSelected = textSettings.theme == themeValue
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .border(
+                                            width = if (isSelected) 3.dp else 0.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = CircleShape
+                                        )
+                                        .padding(if (isSelected) 2.dp else 0.dp)
+                                        .background(
+                                            color = when (themeValue) {
+                                                "light" -> Color.White
+                                                "dark" -> Color(0xFF121212)
+                                                "sepia" -> Color(0xFFF8F0E3)
+                                                "contrast" -> Color.Black
+                                                else -> Color.White
+                                            },
+                                            shape = CircleShape
+                                        )
+                                        .clickable { onSettingsUpdate(textSettings.copy(theme = themeValue)) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (themeValue == "contrast") {
+                                        Text(
+                                            text = "A",
+                                            color = Color.Green,
+                                            fontSize = 16.sp
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = themeName,
+                                    fontSize = 12.sp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Шрифт
+                    Text(
+                        text = "Шрифт",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val fonts = listOf("Georgia", "Arial", "Courier")
+                        fonts.forEach { font ->
+                            FilterChip(
+                                selected = textSettings.fontFamily == font,
+                                onClick = { onSettingsUpdate(textSettings.copy(fontFamily = font)) },
+                                label = {
+                                    Text(
+                                        text = font,
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Межстрочный интервал
+                    Text(
+                        text = "Межстрочный интервал",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val lineHeights = listOf(
+                            "Узкий" to 1.2f,
+                            "Средний" to 1.5f,
+                            "Широкий" to 2.0f
+                        )
+
+                        lineHeights.forEach { (label, value) ->
+                            FilterChip(
+                                selected = textSettings.lineHeight == value,
+                                onClick = { onSettingsUpdate(textSettings.copy(lineHeight = value)) },
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Отступы страницы
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.FormatIndentIncrease,
+                            contentDescription = "Отступы",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Отступы страницы",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${textSettings.margins.toInt()}dp",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Slider(
+                        value = textSettings.margins,
+                        onValueChange = { onSettingsUpdate(textSettings.copy(margins = it)) },
+                        valueRange = 8f..32f,
+                        steps = 6,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Кнопка сброса настроек
+                    OutlinedButton(
+                        onClick = { onSettingsUpdate(TextSettings()) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Text("Сбросить настройки")
                     }
                 }
-            }
-        }
-
-        // Шрифт
-        SettingSection(title = "Шрифт") {
-            val fonts = listOf("Georgia", "Arial", "Courier")
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                fonts.forEach { font ->
-                    FilterChip(
-                        selected = textSettings.fontFamily == font,
-                        onClick = {
-                            onSettingsUpdate(textSettings.copy(fontFamily = font))
-                        },
-                        label = { Text(font) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
                 }
             }
-        }
 
-        // Межстрочный интервал
-        SettingSection(title = "Межстрочный интервал") {
-            val lineHeights = listOf("Узкий" to 1.2f, "Средний" to 1.5f, "Широкий" to 2.0f)
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
+            // Кнопка "Готово"
+            Button(
+                onClick = onClose,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                lineHeights.forEach { (label, value) ->
-                    FilterChip(
-                        selected = textSettings.lineHeight == value,
-                        onClick = {
-                            onSettingsUpdate(textSettings.copy(lineHeight = value))
-                        },
-                        label = { Text(label) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
+                Text("Готово")
             }
         }
-
-        // Отступы
-        SettingSection(title = "Отступы страницы") {
-            Slider(
-                value = textSettings.margins,
-                onValueChange = { newValue ->
-                    onSettingsUpdate(textSettings.copy(margins = newValue))
-                },
-                valueRange = 8f..32f,
-                steps = 6,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = "${textSettings.margins.toInt()}dp",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.align(Alignment.End)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Кнопка сброса
-        Button(
-            onClick = {
-                onSettingsUpdate(TextSettings())
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
-            )
-        ) {
-            Text("Сбросить настройки")
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
     }
-}
 
-@Composable
-fun SettingSection(
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Column(
-        modifier = Modifier.padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        content()
-        HorizontalDivider(
-            modifier = Modifier.padding(vertical = 16.dp),
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-        )
-    }
-}
 
 @Composable
 fun QuickSettingsMenu(
@@ -640,5 +739,27 @@ fun QuickSettingsMenu(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun SettingSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(vertical = 8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        content()
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 16.dp),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
     }
 }
