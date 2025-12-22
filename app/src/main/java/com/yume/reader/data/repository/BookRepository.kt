@@ -13,6 +13,7 @@ import com.yume.reader.data.local.entity.BookEntity
 import com.yume.reader.data.local.entity.ChapterEntity
 import com.yume.reader.domain.models.epub.EpubBook
 import com.yume.reader.data.epub.EpubParser
+import com.yume.reader.data.images.BookImageLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -30,6 +31,7 @@ class BookRepository @Inject constructor(
     private val readingProgressDao: ReadingProgressDao,
     private val chapterContentRepo: ChapterContentRepository, // Добавляем
     private val context: Context,
+    private val imageLoader: BookImageLoader,
 ) {
 
     // Храним загруженные EPUB книги в памяти для быстрого доступа
@@ -130,11 +132,15 @@ class BookRepository @Inject constructor(
 
     suspend fun updateBook(book: BookEntity) = bookDao.updateBook(book)
 
+    // Обновляем метод deleteBook для очистки кеша изображений
     suspend fun deleteBook(book: BookEntity) {
         withContext(Dispatchers.IO) {
             try {
                 // Удаляем кешированные главы
                 chapterContentRepo.deleteBookChapters(book.id)
+
+                // Удаляем кеш изображений
+                imageLoader.clearCacheForBook(book.id)
 
                 // Удаляем обложку
                 book.coverUrl?.takeIf { it.isNotEmpty() }?.let { coverPath ->
@@ -450,15 +456,54 @@ class BookRepository @Inject constructor(
         }
     }
 
+    // Обновляем метод для получения контента с изображениями
     suspend fun getChapterContentWithImages(bookId: Long, chapterNumber: Int): Pair<String, List<String>> {
         return withContext(Dispatchers.IO) {
             try {
-                // Пока возвращаем только контент без изображений
+                val epubBook = loadedEpubBooks[bookId] ?: run {
+                    val bookEntity = bookDao.getBookById(bookId)
+                    bookEntity?.filePath?.let { filePath ->
+                        getEpubBookInfo(filePath)
+                    }?.also { epub ->
+                        loadedEpubBooks[bookId] = epub
+                    }
+                }
+
+                if (epubBook == null) {
+                    throw Exception("EPUB книга не найдена")
+                }
+
+                val chapter = epubBook.chapters.find { it.chapterNumber == chapterNumber }
+                    ?: throw Exception("Глава $chapterNumber не найдена")
+
+                // Получаем контент
+                val content = getChapterContent(bookId, chapterNumber)
+
+                // Обрабатываем изображения
+                val imageUrls = mutableListOf<String>()
+                var processedContent = content
+
+                // Если в главе есть изображения, обрабатываем их
+                chapter.images.forEachIndexed { index, image ->
+                    if (image.data != null) {
+                        val imageUrl = imageLoader.createDataUrlFromBytes(image.data)
+                        if (imageUrl.isNotEmpty()) {
+                            imageUrls.add(imageUrl)
+                            // Добавляем маркер для изображения в текст
+                            processedContent += "\n\n[IMAGE:$index]\n\n"
+                        }
+                    }
+                }
+
+                // Сохраняем обновленный контент в кеш
+                chapterContentRepo.saveChapterContent(bookId, chapterNumber, processedContent)
+
+                Pair(processedContent, imageUrls)
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка загрузки контента с изображениями: ${e.message}")
+                // Fallback: возвращаем обычный контент
                 val content = getChapterContent(bookId, chapterNumber)
                 Pair(content, emptyList())
-            } catch (e: Exception) {
-                Log.e("BookRepository", "Ошибка загрузки контента: ${e.message}")
-                throw e
             }
         }
     }

@@ -3,6 +3,7 @@ package com.yume.reader.data.epub
 
 import android.content.Context
 import android.util.Log
+import com.yume.reader.domain.models.epub.ChapterImage
 import com.yume.reader.domain.models.epub.EpubBook
 import com.yume.reader.domain.models.epub.EpubChapter
 import com.yume.reader.domain.models.epub.EpubMetadata
@@ -62,97 +63,6 @@ class EpubParser @Inject constructor(
         } catch (e: Exception) {
             null
         }
-    }
-
-    private fun extractChapters(book: Book): List<EpubChapter> {
-        val chapters = mutableListOf<EpubChapter>()
-        val tableOfContents = book.tableOfContents
-
-        Log.d("EpubParser", "📋 Начало извлечения глав...")
-        Log.d("EpubParser", "📑 Элементов в оглавлении: ${tableOfContents.tocReferences.size}")
-
-        // Рекурсивно обходим все элементы оглавления
-        fun processTocItems(
-            tocItems: List<TOCReference>,
-            chapterCounter: IntArray,
-            processedResources: MutableSet<String>
-        ) {
-            for (tocItem in tocItems) {
-                val resource = tocItem.resource
-                if (resource != null && resource.id !in processedResources) {
-                    processedResources.add(resource.id)
-
-                    try {
-                        // Получаем содержимое ресурса
-                        val htmlContent = String(resource.data, Charsets.UTF_8)
-
-                        // Проверяем тип ресурса
-                        val mediaType = resource.mediaType?.toString()?.lowercase() ?: ""
-
-                        // Проверяем, является ли это реальной главой с текстом
-                        if (shouldProcessAsChapter(resource, tocItem.title ?: "", htmlContent)) {
-                            chapterCounter[0]++
-
-                            Log.d("EpubParser", "📖 Обработка главы ${chapterCounter[0]}: ${tocItem.title}")
-
-                            // Извлекаем текст с очисткой от дублирующихся заголовков
-                            val (cleanText, filteredTitle) = extractAndCleanText(
-                                html = htmlContent,
-                                chapterTitle = tocItem.title ?: "Глава ${chapterCounter[0]}",
-                                resourceId = resource.id
-                            )
-
-                            val wordCount = cleanText.split("\\s+".toRegex()).size
-
-                            // Добавляем главу только если есть текст и это не обложка
-                            if (cleanText.isNotBlank() && !isCoverOrMetadata(filteredTitle)) {
-                                chapters.add(
-                                    EpubChapter(
-                                        id = resource.id,
-                                        title = filteredTitle,
-                                        content = cleanText,
-                                        rawHtml = htmlContent,
-                                        chapterNumber = chapterCounter[0],
-                                        wordCount = wordCount
-                                    )
-                                )
-                                Log.d("EpubParser", "✅ Добавлена глава '$filteredTitle' с $wordCount словами")
-                            } else {
-                                Log.w("EpubParser", "⚠️ Пропущена глава '${tocItem.title}' - мало текста или обложка")
-                                chapterCounter[0]-- // Уменьшаем счетчик, так как главу не добавили
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("EpubParser", "❌ Ошибка обработки ресурса: ${e.message}")
-                    }
-                }
-
-                // Обрабатываем вложенные элементы
-                if (tocItem.children.isNotEmpty()) {
-                    processTocItems(tocItem.children, chapterCounter, processedResources)
-                }
-            }
-        }
-
-        val chapterCounter = intArrayOf(0)
-        val processedResources = mutableSetOf<String>()
-        processTocItems(tableOfContents.tocReferences, chapterCounter, processedResources)
-
-        // Если главы найдены, фильтруем пустые и ненужные
-        val filteredChapters = chapters.filter {
-                chapter ->
-            chapter.content.isNotBlank() &&
-                    !isCoverOrMetadata(chapter.title) &&
-                    chapter.content.length > 50
-        }
-
-        // Перенумеруем главы после фильтрации
-        val finalChapters = filteredChapters.mapIndexed { index, chapter ->
-            chapter.copy(chapterNumber = index + 1)
-        }
-
-        Log.d("EpubParser", "🎉 Извлечено глав: ${finalChapters.size}")
-        return finalChapters
     }
 
     private fun shouldProcessAsChapter(resource: Resource, title: String, htmlContent: String): Boolean {
@@ -295,5 +205,178 @@ class EpubParser @Inject constructor(
                 .firstOrNull { it.scheme?.equals("ISBN", ignoreCase = true) == true }?.value,
             totalPages = book.tableOfContents.tocReferences.size
         )
+    }
+
+    private fun extractChapters(book: Book): List<EpubChapter> {
+        val chapters = mutableListOf<EpubChapter>()
+        val tableOfContents = book.tableOfContents
+
+        Log.d("EpubParser", "📋 Начало извлечения глав...")
+
+        // Собираем все ресурсы изображений
+        val imageResources = mutableMapOf<String, Resource>()
+        book.resources.all.forEach { resource ->
+            val mediaType = resource.mediaType?.toString()?.lowercase() ?: ""
+            if (mediaType.startsWith("image/")) {
+                val href = resource.href
+                imageResources[href] = resource
+                // Также добавляем варианты путей для поиска
+                imageResources["OEBPS/$href"] = resource
+                imageResources["images/$href"] = resource
+                if (href.contains("/")) {
+                    val fileName = href.substringAfterLast("/")
+                    imageResources[fileName] = resource
+                }
+            }
+        }
+
+        Log.d("EpubParser", "📸 Найдено изображений: ${imageResources.size}")
+
+        // Рекурсивно обходим все элементы оглавления
+        fun processTocItems(
+            tocItems: List<TOCReference>,
+            chapterCounter: IntArray,
+            processedResources: MutableSet<String>
+        ) {
+            for (tocItem in tocItems) {
+                val resource = tocItem.resource
+                if (resource != null && resource.id !in processedResources) {
+                    processedResources.add(resource.id)
+
+                    try {
+                        val htmlContent = String(resource.data, Charsets.UTF_8)
+                        val mediaType = resource.mediaType?.toString()?.lowercase() ?: ""
+
+                        if (shouldProcessAsChapter(resource, tocItem.title ?: "", htmlContent)) {
+                            chapterCounter[0]++
+
+                            Log.d("EpubParser", "📖 Обработка главы ${chapterCounter[0]}: ${tocItem.title}")
+
+                            // Извлекаем текст и изображения
+                            val (cleanText, filteredTitle, images) = extractContentWithImages(
+                                html = htmlContent,
+                                chapterTitle = tocItem.title ?: "Глава ${chapterCounter[0]}",
+                                imageResources = imageResources,
+                                resourceId = resource.id
+                            )
+
+                            val wordCount = cleanText.split("\\s+".toRegex()).size
+
+                            if (cleanText.isNotBlank() && !isCoverOrMetadata(filteredTitle)) {
+                                chapters.add(
+                                    EpubChapter(
+                                        id = resource.id,
+                                        title = filteredTitle,
+                                        content = cleanText,
+                                        rawHtml = htmlContent,
+                                        chapterNumber = chapterCounter[0],
+                                        wordCount = wordCount,
+                                        images = images
+                                    )
+                                )
+                                Log.d("EpubParser", "✅ Добавлена глава '$filteredTitle' с ${images.size} изображениями")
+                            } else {
+                                Log.w("EpubParser", "⚠️ Пропущена глава '${tocItem.title}'")
+                                chapterCounter[0]--
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("EpubParser", "❌ Ошибка обработки ресурса: ${e.message}")
+                    }
+                }
+
+                if (tocItem.children.isNotEmpty()) {
+                    processTocItems(tocItem.children, chapterCounter, processedResources)
+                }
+            }
+        }
+
+        val chapterCounter = intArrayOf(0)
+        val processedResources = mutableSetOf<String>()
+        processTocItems(tableOfContents.tocReferences, chapterCounter, processedResources)
+
+        // Фильтруем пустые главы
+        val filteredChapters = chapters.filter { chapter ->
+            chapter.content.isNotBlank() &&
+                    !isCoverOrMetadata(chapter.title) &&
+                    chapter.content.length > 50
+        }
+
+        // Перенумеруем главы после фильтрации
+        val finalChapters = filteredChapters.mapIndexed { index, chapter ->
+            chapter.copy(chapterNumber = index + 1)
+        }
+
+        Log.d("EpubParser", "🎉 Извлечено глав: ${finalChapters.size}")
+        return finalChapters
+    }
+
+    private fun extractContentWithImages(
+        html: String,
+        chapterTitle: String,
+        imageResources: Map<String, Resource>,
+        resourceId: String
+    ): Triple<String, String, List<ChapterImage>> {
+        return try {
+            val doc = Jsoup.parse(html)
+            doc.select("script, style, meta, link").remove()
+
+            val body = doc.body()
+            val images = mutableListOf<ChapterImage>()
+
+            // Находим все изображения
+            val imgElements = body.select("img")
+            Log.d("EpubParser", "🔍 В главе найдено тегов img: ${imgElements.size}")
+
+            // Удаляем изображения из текста, но запоминаем их
+            imgElements.forEach { img ->
+                val src = img.attr("src")
+                val alt = img.attr("alt")
+
+                // Находим ресурс изображения
+                val imageResource = findImageResource(src, imageResources)
+
+                if (imageResource != null && imageResource.data != null) {
+                    val imageId = "${resourceId}_img_${images.size}"
+
+                    images.add(
+                        ChapterImage(
+                            id = imageId,
+                            src = src,
+                            altText = if (alt.isNotBlank()) alt else null,
+                            position = 0, // Пока не используем позиционирование
+                            data = imageResource.data
+                        )
+                    )
+
+                    Log.d("EpubParser", "✅ Найдено изображение: $src, размер: ${imageResource.data.size} байт")
+                } else {
+                    Log.w("EpubParser", "⚠️ Не найден ресурс для изображения: $src")
+                }
+
+                // Удаляем тег img из документа
+                img.remove()
+            }
+
+            // Получаем чистый текст
+            val fullText = body.text().trim()
+            val extractedTitle = extractTitleFromText(fullText, chapterTitle)
+            val cleanText = removeDuplicateTitle(fullText, extractedTitle)
+
+            Triple(cleanText, extractedTitle, images)
+
+        } catch (e: Exception) {
+            Log.e("EpubParser", "❌ Ошибка при обработке HTML с изображениями: ${e.message}")
+            val (cleanText, title) = extractAndCleanText(html, chapterTitle, resourceId)
+            Triple(cleanText, title, emptyList())
+        }
+    }
+
+    private fun findImageResource(src: String, imageResources: Map<String, Resource>): Resource? {
+        // Пробуем найти по разным вариантам пути
+        return imageResources[src] ?:
+        imageResources["OEBPS/$src"] ?:
+        imageResources["images/$src"] ?:
+        imageResources[src.substringAfterLast("/")]
     }
 }

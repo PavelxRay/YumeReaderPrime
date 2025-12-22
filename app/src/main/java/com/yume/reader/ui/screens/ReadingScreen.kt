@@ -9,7 +9,6 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,9 +33,18 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import com.yume.reader.R
 import com.yume.reader.data.models.TextSettings
 import com.yume.reader.ui.viewmodels.ReadingViewModel
 import kotlinx.coroutines.launch
+
+// Модели для элементов контента
+sealed class ContentItem {
+    data class Text(val text: String) : ContentItem()
+    data class Image(val imageUrl: String, val altText: String? = null) : ContentItem()
+}
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +57,7 @@ fun ReadingScreen(
 ) {
     // Инициализируем ViewModel с bookId
     LaunchedEffect(bookId, chapter) {
+        Log.d("ReadingScreen", "Инициализация экрана чтения, bookId: $bookId, chapter: $chapter")
         viewModel.setBookId(bookId)
         chapter?.let { viewModel.goToChapter(it) }
     }
@@ -67,8 +77,34 @@ fun ReadingScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val currentContent by viewModel.currentContent.collectAsState()
 
+    // Состояние для изображений
+    var chapterImages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var contentItems by remember { mutableStateOf<List<ContentItem>>(emptyList()) }
+
     val currentChapter = remember(chapters, currentChapterIndex) {
         chapters.getOrNull(currentChapterIndex - 1)
+    }
+
+    // Загружаем изображения при изменении главы
+    LaunchedEffect(currentChapterIndex) {
+        if (currentChapterIndex > 0) {
+            try {
+                Log.d("ReadingScreen", "Загрузка изображений для главы $currentChapterIndex")
+                val (_, images) = viewModel.getChapterContentWithImages(currentChapterIndex)
+                chapterImages = images
+                Log.d("ReadingScreen", "Загружено ${images.size} изображений")
+            } catch (e: Exception) {
+                Log.e("ReadingScreen", "Ошибка загрузки изображений: ${e.message}")
+                chapterImages = emptyList()
+            }
+        }
+    }
+
+    // Разбираем контент на элементы при изменении контента или изображений
+    LaunchedEffect(currentContent, chapterImages) {
+        val content = currentContent ?: ""
+        contentItems = parseContentWithImages(content, chapterImages)
+        Log.d("ReadingScreen", "Разобрано ${contentItems.size} элементов контента")
     }
 
     // Определяем фон в зависимости от темы
@@ -82,7 +118,7 @@ fun ReadingScreen(
     val textColor = when (textSettings.theme) {
         "dark" -> Color.White
         "sepia" -> Color(0xFF5C4B37)
-        "contrast" -> Color(0xFF00FF00) // Зеленый для контраста
+        "contrast" -> Color(0xFF00FF00)
         else -> Color.Black
     }
 
@@ -108,7 +144,7 @@ fun ReadingScreen(
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = if (chapters.isEmpty()) "Загрузка глав..." else "Загрузка...",
+                    text = if (chapters.isEmpty()) "Загрузка глав..." else "Загрузка главы...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -246,17 +282,8 @@ fun ReadingScreen(
                     )
                 }
         ) {
-            // Основной контент
-            val chapterContent = remember(currentContent) {
-                currentContent?.let { content ->
-                    content.split("\n\n", "\n")
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() && it.length > 3 }
-                        .filterNot { it.matches(Regex("^[\\d\\s.:/-]+$")) }
-                } ?: emptyList()
-            }
-
-            if (chapterContent.isEmpty()) {
+            // Основной контент с изображениями
+            if (contentItems.isEmpty()) {
                 // Состояние "пустая глава" или загрузка
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -309,19 +336,52 @@ fun ReadingScreen(
                             bottom = paddingValues.calculateBottomPadding()
                         )
                 ) {
-                    itemsIndexed(chapterContent) { index, paragraph ->
-                        Text(
-                            text = paragraph,
-                            modifier = Modifier.padding(
-                                vertical = textSettings.paragraphSpacing.dp
-                            ),
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = textSettings.fontSize.sp,
-                                lineHeight = (textSettings.fontSize * textSettings.lineHeight).sp,
-                                fontFamily = fontFamily
-                            ),
-                            color = textColor
-                        )
+                    items(contentItems.size) { index ->
+                        val item = contentItems[index]
+                        when (item) {
+                            is ContentItem.Text -> {
+                                // Разбиваем текст на параграфы для лучшего отображения
+                                val paragraphs = item.text.split("\n\n", "\n")
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() && it.length > 3 }
+                                    .filterNot { it.matches(Regex("^[\\d\\s.:/-]+$")) }
+
+                                Column {
+                                    paragraphs.forEach { paragraph ->
+                                        Text(
+                                            text = paragraph,
+                                            modifier = Modifier.padding(
+                                                vertical = textSettings.paragraphSpacing.dp
+                                            ),
+                                            style = MaterialTheme.typography.bodyLarge.copy(
+                                                fontSize = textSettings.fontSize.sp,
+                                                lineHeight = (textSettings.fontSize * textSettings.lineHeight).sp,
+                                                fontFamily = fontFamily
+                                            ),
+                                            color = textColor
+                                        )
+                                    }
+                                }
+                            }
+                            is ContentItem.Image -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AsyncImage(
+                                        model = item.imageUrl,
+                                        contentDescription = item.altText ?: "Изображение из книги",
+                                        modifier = Modifier
+                                            .fillMaxWidth(fraction = 0.9f)
+                                            .clip(RoundedCornerShape(8.dp)),
+                                        contentScale = ContentScale.Fit,
+                                        placeholder = rememberAsyncImagePainter(R.drawable.ic_image_placeholder)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -368,6 +428,58 @@ fun ReadingScreen(
             }
         }
     }
+}
+
+// Функция для разбора контента с изображениями
+private fun parseContentWithImages(content: String, images: List<String>): List<ContentItem> {
+    val items = mutableListOf<ContentItem>()
+
+    if (content.isEmpty()) {
+        return items
+    }
+
+    // Ищем маркеры [IMAGE:N] в тексте
+    val regex = Regex("\\[IMAGE:(\\d+)\\]")
+    var lastIndex = 0
+
+    regex.findAll(content).forEach { matchResult ->
+        val startIndex = matchResult.range.first
+        val endIndex = matchResult.range.last + 1
+
+        // Добавляем текст до изображения
+        if (startIndex > lastIndex) {
+            val text = content.substring(lastIndex, startIndex).trim()
+            if (text.isNotEmpty()) {
+                items.add(ContentItem.Text(text))
+            }
+        }
+
+        // Добавляем изображение
+        val imageIndex = matchResult.groupValues[1].toIntOrNull()
+        if (imageIndex != null && imageIndex < images.size) {
+            items.add(ContentItem.Image(images[imageIndex]))
+        } else if (imageIndex != null) {
+            // Если индекс изображения выходит за пределы, добавляем плейсхолдер
+            items.add(ContentItem.Image("", "Изображение $imageIndex"))
+        }
+
+        lastIndex = endIndex
+    }
+
+    // Добавляем оставшийся текст
+    if (lastIndex < content.length) {
+        val text = content.substring(lastIndex).trim()
+        if (text.isNotEmpty()) {
+            items.add(ContentItem.Text(text))
+        }
+    }
+
+    // Если нет маркеров, просто добавляем весь текст
+    if (items.isEmpty() && content.isNotEmpty()) {
+        items.add(ContentItem.Text(content))
+    }
+
+    return items
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

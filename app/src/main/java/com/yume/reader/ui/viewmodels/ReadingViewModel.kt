@@ -351,15 +351,13 @@ class ReadingViewModel @Inject constructor(
     }
 
     suspend fun getChapterContentWithImages(chapterNumber: Int): Pair<String, List<String>> {
-        return withContext(Dispatchers.IO) {
-            try {
-                currentBookId?.let { bookId ->
-                    bookRepository.getChapterContentWithImages(bookId, chapterNumber)
-                } ?: Pair("", emptyList())
-            } catch (e: Exception) {
-                Log.e("ReadingViewModel", "Ошибка загрузки контента с изображениями: ${e.message}")
-                Pair("", emptyList())
-            } as Pair<String, List<String>>
+        return try {
+            currentBookId?.let { bookId ->
+                bookRepository.getChapterContentWithImages(bookId, chapterNumber)
+            } ?: Pair("", emptyList())
+        } catch (e: Exception) {
+            Log.e("ReadingViewModel", "Ошибка загрузки контента с изображениями: ${e.message}")
+            Pair("", emptyList())
         }
     }
 

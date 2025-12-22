@@ -1,7 +1,12 @@
 package com.yume.reader.di
 
 import android.content.Context
+import coil.ImageLoader as CoilImageLoader
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
+import coil.request.CachePolicy
 import com.yume.reader.data.epub.EpubParser
+import com.yume.reader.data.images.BookImageLoader // Обновляем импорт
 import com.yume.reader.data.local.dao.*
 import com.yume.reader.data.local.database.AppDatabase
 import com.yume.reader.data.repository.*
@@ -47,15 +52,44 @@ object AppModule {
     @Singleton
     fun provideReadingProgressDao(database: AppDatabase): ReadingProgressDao = database.readingProgressDao()
 
+    // Опционально: если нужен Coil ImageLoader для UI
+    @Provides
+    @Singleton
+    fun provideCoilImageLoader(@ApplicationContext context: Context): CoilImageLoader {
+        return CoilImageLoader.Builder(context)
+            .memoryCache {
+                MemoryCache.Builder(context)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("coil_cache"))
+                    .maxSizePercent(0.02)
+                    .build()
+            }
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .respectCacheHeaders(false)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBookImageLoader(@ApplicationContext context: Context): BookImageLoader {
+        return BookImageLoader(context)
+    }
+
     @Provides
     @Singleton
     fun provideBookRepository(
         bookDao: BookDao,
         chapterDao: ChapterDao,
         readingProgressDao: ReadingProgressDao,
-        chapterContentRepo: ChapterContentRepository, // Добавляем
-        @ApplicationContext context: Context
-    ): BookRepository = BookRepository(bookDao, chapterDao, readingProgressDao, chapterContentRepo, context)
+        chapterContentRepo: ChapterContentRepository,
+        @ApplicationContext context: Context,
+        bookImageLoader: BookImageLoader // Обновляем имя параметра
+    ): BookRepository = BookRepository(bookDao, chapterDao, readingProgressDao, chapterContentRepo, context, bookImageLoader)
 
     @Provides
     @Singleton
@@ -83,7 +117,6 @@ object AppModule {
     @Singleton
     fun provideEpubParser(@ApplicationContext context: Context): EpubParser = EpubParser(context)
 
-    // Дополнительные ViewModel провайдеры
     @Provides
     fun provideBookDetailsViewModel(
         bookRepository: BookRepository,
