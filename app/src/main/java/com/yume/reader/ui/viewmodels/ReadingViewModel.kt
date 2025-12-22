@@ -1,6 +1,7 @@
 package com.yume.reader.ui.viewmodels
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -347,6 +348,19 @@ class ReadingViewModel @Inject constructor(
 
     fun resetToDefaultSettings() {
         updateTextSettings(TextSettings())
+    }
+
+    suspend fun getChapterContentWithImages(chapterNumber: Int): Pair<String, List<String>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                currentBookId?.let { bookId ->
+                    bookRepository.getChapterContentWithImages(bookId, chapterNumber)
+                } ?: Pair("", emptyList())
+            } catch (e: Exception) {
+                Log.e("ReadingViewModel", "Ошибка загрузки контента с изображениями: ${e.message}")
+                Pair("", emptyList())
+            } as Pair<String, List<String>>
+        }
     }
 
     override fun onCleared() {

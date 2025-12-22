@@ -26,9 +26,26 @@ data class EpubChapter(
     val content: String,
     val rawHtml: String,
     val chapterNumber: Int,
-    val wordCount: Int = 0
-    // Убрали structuredContent из параметров
+    val wordCount: Int = 0,
+    val images: List<ChapterImage> = emptyList() // Добавляем изображения
 )
+
+data class ChapterImage(
+    val id: String,
+    val src: String,
+    val altText: String? = null,
+    val position: Int = 0,
+    val data: ByteArray? = null
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as ChapterImage
+        return id == other.id
+    }
+
+    override fun hashCode(): Int = id.hashCode()
+}
 
 data class EpubMetadata(
     val language: String = "ru",

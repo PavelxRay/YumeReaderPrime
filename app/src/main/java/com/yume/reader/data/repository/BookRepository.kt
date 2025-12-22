@@ -3,7 +3,9 @@ package com.yume.reader.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import com.yume.reader.data.local.dao.ReadingProgressDao
 import com.yume.reader.data.local.dao.BookDao
 import com.yume.reader.data.local.dao.ChapterDao
@@ -27,7 +29,7 @@ class BookRepository @Inject constructor(
     private val chapterDao: ChapterDao,
     private val readingProgressDao: ReadingProgressDao,
     private val chapterContentRepo: ChapterContentRepository, // Добавляем
-    private val context: Context
+    private val context: Context,
 ) {
 
     // Храним загруженные EPUB книги в памяти для быстрого доступа
@@ -401,6 +403,7 @@ class BookRepository @Inject constructor(
     }
 
     // Метод для обновления прогресса при чтении
+    @RequiresApi(Build.VERSION_CODES.O)
     suspend fun updateBookReadingProgress(bookId: Long, currentChapter: Int, progressPercent: Float) {
         withContext(Dispatchers.IO) {
             try {
@@ -443,6 +446,19 @@ class BookRepository @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e("BookRepository", "Ошибка предзагрузки глав: ${e.message}")
+            }
+        }
+    }
+
+    suspend fun getChapterContentWithImages(bookId: Long, chapterNumber: Int): Pair<String, List<String>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Пока возвращаем только контент без изображений
+                val content = getChapterContent(bookId, chapterNumber)
+                Pair(content, emptyList())
+            } catch (e: Exception) {
+                Log.e("BookRepository", "Ошибка загрузки контента: ${e.message}")
+                throw e
             }
         }
     }
