@@ -1,5 +1,8 @@
+// ui/navigation/YumeReaderNavigation.kt (обновляем)
 package com.yume.reader.ui.navigation
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,12 +16,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.yume.reader.ui.screens.FavoritesScreen
-import com.yume.reader.ui.screens.LibraryScreen
-import com.yume.reader.ui.screens.ProfileScreen
-import com.yume.reader.ui.screens.ReadingNowScreen
-import com.yume.reader.ui.screens.ReadingScreen
+import com.yume.reader.ui.screens.*
+import com.yume.reader.ui.screens.BookDetailsScreen
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun YumeReaderNavigation() {
     val navController = rememberNavController()
@@ -29,7 +30,7 @@ fun YumeReaderNavigation() {
 
     // Определяем, нужно ли показывать нижнюю панель навигации
     showBottomBar = when (currentRoute) {
-        "library", "reading_now", "favorites", "profile" -> true
+        "library", "reading_now", "favorites", "globSettings" -> true
         else -> false
     }
 
@@ -59,32 +60,37 @@ fun YumeReaderNavigation() {
             composable("favorites") {
                 FavoritesScreen(navController = navController)
             }
-            composable("profile") {
-                ProfileScreen(navController = navController)
+            composable("globSettings") {
+                SettingsScreen(navController = navController)
             }
 
-            // Другие экраны
             composable(
                 "reader/{bookId}",
-                arguments = listOf(navArgument("bookId") { type = NavType.LongType })  // Измените на LongType
+                arguments = listOf(navArgument("bookId") { type = NavType.LongType })
             ) { backStackEntry ->
                 val bookId = backStackEntry.arguments?.getLong("bookId") ?: 0L
+                val chapter = backStackEntry.arguments?.getString("chapter")?.toIntOrNull()
                 ReadingScreen(
+                    navController = navController,
+                    bookId = bookId,
+                    chapter = chapter
+                )
+            }
+
+            // ДОБАВЛЯЕМ МАРШРУТ ДЛЯ ДЕТАЛЕЙ КНИГИ
+            composable(
+                "book_details/{bookId}",
+                arguments = listOf(navArgument("bookId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val bookId = backStackEntry.arguments?.getLong("bookId") ?: 0L
+                BookDetailsScreen(
                     navController = navController,
                     bookId = bookId
                 )
             }
 
-            composable(
-                "book_details/{bookId}",
-                arguments = listOf(navArgument("bookId") { type = NavType.LongType })  // Измените на LongType
-            ) { backStackEntry ->
-                val bookId = backStackEntry.arguments?.getLong("bookId") ?: 0L
-                // BookDetailsScreen(bookId = bookId, navController = navController)
-            }
-
-            composable("add_book") {
-                // AddBookScreen(navController = navController)
+            composable("import_epub") {
+                ImportEpubScreen(navController = navController)
             }
         }
     }

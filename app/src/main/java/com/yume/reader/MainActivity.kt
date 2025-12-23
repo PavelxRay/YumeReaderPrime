@@ -1,57 +1,37 @@
 package com.yume.reader
 
+import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.lifecycleScope
-import com.yume.reader.data.repository.BookRepository
-import com.yume.reader.data.repository.ChapterRepository
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.yume.reader.ui.navigation.YumeReaderNavigation
 import com.yume.reader.ui.theme.YumeReaderTheme
+import com.yume.reader.ui.viewmodels.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    @Inject
-    lateinit var bookRepository: BookRepository
-
-    @Inject
-    lateinit var chapterRepository: ChapterRepository
-
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Запускаем инициализацию в фоне
-        lifecycleScope.launch(Dispatchers.IO) {
-            Log.d("MainActivity", "🔧 Начинаем инициализацию базы...")
-
-            // Шаг 1: Инициализируем книги
-            bookRepository.initializeIfEmpty()
-
-            // Небольшая задержка
-            delay(500)
-
-            // Шаг 2: Добавляем тестовые главы
-            bookRepository.addTestChapters()
-
-            Log.d("MainActivity", "✅ Инициализация базы завершена")
-        }
-
         setContent {
-            YumeReaderTheme {
+            // Получаем настройки темы из ViewModel
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val appTheme by settingsViewModel.appTheme.collectAsState()
+
+            YumeReaderTheme(
+                appTheme = appTheme // Передаем выбранную тему
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.background
                 ) {
                     YumeReaderNavigation()
                 }
