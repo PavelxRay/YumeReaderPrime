@@ -33,8 +33,4 @@ interface ChapterDao {
 
     @Query("SELECT COUNT(*) FROM chapters")
     suspend fun getTotalChaptersCountAll(): Int
-
-    // УБЕРИТЕ ЭТОТ ДУБЛИРУЮЩИЙ МЕТОД:
-    // @Insert(onConflict = OnConflictStrategy.REPLACE)
-    // suspend fun insertChapter(chapter: ChapterEntity): Long
 }

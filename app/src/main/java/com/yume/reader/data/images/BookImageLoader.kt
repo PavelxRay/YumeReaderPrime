@@ -37,23 +37,6 @@ class BookImageLoader @Inject constructor(
         }
     }
 
-    suspend fun saveImageToCache(imageData: ByteArray, bookId: Long, imageId: String): String {
-        return withContext(Dispatchers.IO) {
-            try {
-                val cacheDir = File(context.cacheDir, "book_images/$bookId")
-                cacheDir.mkdirs()
-
-                val imageFile = File(cacheDir, "$imageId.jpg")
-                imageFile.writeBytes(imageData)
-
-                imageFile.absolutePath
-            } catch (e: Exception) {
-                // Если не удалось сохранить, создаем Data URL
-                createDataUrlFromBytes(imageData)
-            }
-        }
-    }
-
     fun clearCacheForBook(bookId: Long) {
         try {
             val cacheDir = File(context.cacheDir, "book_images/$bookId")

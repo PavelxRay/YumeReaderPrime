@@ -302,54 +302,6 @@ class ReadingViewModel @Inject constructor(
         }
     }
 
-    // Вспомогательные методы для UI
-    fun getProgressPercentage(): Int {
-        return (_readingProgress.value * 100).toInt()
-    }
-
-    fun getChapterProgressText(): String {
-        return "${_currentChapter.value}/${chapters.value.size}"
-    }
-
-    // Методы для управления настройками текста
-    fun increaseFontSize() {
-        val newSize = _textSettings.value.fontSize + 1
-        if (newSize <= 30) {
-            updateTextSettings(_textSettings.value.copy(fontSize = newSize))
-        }
-    }
-
-    fun decreaseFontSize() {
-        val newSize = _textSettings.value.fontSize - 1
-        if (newSize >= 12) {
-            updateTextSettings(_textSettings.value.copy(fontSize = newSize))
-        }
-    }
-
-    fun changeTheme(theme: String) {
-        updateTextSettings(_textSettings.value.copy(theme = theme))
-    }
-
-    fun changeFontFamily(fontFamily: String) {
-        updateTextSettings(_textSettings.value.copy(fontFamily = fontFamily))
-    }
-
-    fun updateLineHeight(lineHeight: Float) {
-        updateTextSettings(_textSettings.value.copy(lineHeight = lineHeight))
-    }
-
-    fun updateMargins(margins: Float) {
-        updateTextSettings(_textSettings.value.copy(margins = margins))
-    }
-
-    fun updateBrightness(brightness: Float) {
-        updateTextSettings(_textSettings.value.copy(brightness = brightness))
-    }
-
-    fun resetToDefaultSettings() {
-        updateTextSettings(TextSettings())
-    }
-
     suspend fun getChapterContentWithImages(chapterNumber: Int): Pair<String, List<String>> {
         return try {
             currentBookId?.let { bookId ->

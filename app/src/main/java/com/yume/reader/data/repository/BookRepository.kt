@@ -52,85 +52,7 @@ class BookRepository @Inject constructor(
 
     fun getFavoriteBooks(): Flow<List<BookEntity>> = bookDao.getFavoriteBooks()
 
-    fun searchBooks(query: String): Flow<List<BookEntity>> = bookDao.searchBooks(query)
-
-    suspend fun initializeIfEmpty() {
-        Log.d("BookRepository", "🚀 Начинаем инициализацию базы...")
-
-        try {
-            val count = bookDao.getTotalBooksCount()
-            Log.d("BookRepository", "📊 Текущее количество книг в базе: $count")
-
-            if (count == 0) {
-                Log.d("BookRepository", "📝 База пуста, добавляем тестовые книги")
-
-                val testBooks = listOf(
-                    BookEntity(
-                        title = "Мастер и Маргарита",
-                        author = "Михаил Булгаков",
-                        totalPages = 384,
-                        currentPage = 250,
-                        progress = 65,
-                        isReading = true,
-                        isFavorite = true,
-                        addedDate = Date(),
-                        lastReadDate = Date()
-                    ),
-                    BookEntity(
-                        title = "1984",
-                        author = "Джордж Оруэлл",
-                        totalPages = 328,
-                        currentPage = 328,
-                        progress = 100,
-                        isFinished = true,
-                        isFavorite = true,
-                        addedDate = Date(),
-                        lastReadDate = Date()
-                    ),
-                    BookEntity(
-                        title = "Преступление и наказание",
-                        author = "Фёдор Достоевский",
-                        totalPages = 672,
-                        currentPage = 200,
-                        progress = 30,
-                        isReading = true,
-                        addedDate = Date(),
-                        lastReadDate = Date()
-                    ),
-                    BookEntity(
-                        title = "Маленький принц",
-                        author = "Антуан де Сент-Экзюпери",
-                        totalPages = 96,
-                        currentPage = 96,
-                        progress = 100,
-                        isFinished = true,
-                        addedDate = Date()
-                    )
-                )
-
-                testBooks.forEach { book ->
-                    try {
-                        val id = bookDao.insertBook(book)
-                        Log.d("BookRepository", "✅ Добавлена книга: ${book.title}, ID = $id")
-                    } catch (e: Exception) {
-                        Log.e("BookRepository", "❌ Ошибка при добавлении книги ${book.title}: ${e.message}")
-                    }
-                }
-
-                Log.d("BookRepository", "🎉 Инициализация завершена. Добавлено ${testBooks.size} книг")
-            } else {
-                Log.d("BookRepository", "📚 База уже содержит $count книг, пропускаем инициализацию")
-            }
-        } catch (e: Exception) {
-            Log.e("BookRepository", "💥 Критическая ошибка в initializeIfEmpty(): ${e.message}", e)
-        }
-    }
-
     suspend fun getBookById(id: Long): BookEntity? = bookDao.getBookById(id)
-
-    suspend fun addBook(book: BookEntity): Long = bookDao.insertBook(book)
-
-    suspend fun updateBook(book: BookEntity) = bookDao.updateBook(book)
 
     // Обновляем метод deleteBook для очистки кеша изображений
     suspend fun deleteBook(book: BookEntity) {
@@ -171,12 +93,6 @@ class BookRepository @Inject constructor(
     suspend fun toggleReadingStatus(id: Long, isReading: Boolean) {
         bookDao.updateReadingStatus(id, isReading)
     }
-
-    fun getFinishedBooksCount(): Flow<Int> = bookDao.getFinishedBooksCount()
-
-    fun getTotalPagesRead(): Flow<Int?> = bookDao.getTotalPagesRead()
-
-    fun getReadingBooksCount(): Flow<Int> = bookDao.getReadingBooksCount()
 
     // EPUB-специфичные методы
     suspend fun importEpubBook(epubBook: EpubBook): Long {
@@ -276,14 +192,6 @@ class BookRepository @Inject constructor(
         }
     }
 
-    private fun calculateReadingTime(wordCount: Int): Int {
-        return if (wordCount > 0) {
-            maxOf(1, (wordCount / 180.0).toInt())
-        } else {
-            1
-        }
-    }
-
     suspend fun scanForEpubFiles(directoryPath: String): List<File> {
         return withContext(Dispatchers.IO) {
             try {
@@ -336,7 +244,6 @@ class BookRepository @Inject constructor(
                 // 1. Проверяем кеш в файловой системе
                 val cachedContent = chapterContentRepo.loadChapterContent(bookId, chapterNumber)
                 if (cachedContent != null) {
-                    Log.d("BookRepository", "Глава $chapterNumber загружена из кеша")
                     return@withContext cachedContent
                 }
 
@@ -389,47 +296,6 @@ class BookRepository @Inject constructor(
     // Получение всех закешированных глав
     suspend fun getCachedChapters(bookId: Long): List<Int> {
         return chapterContentRepo.getCachedChapters(bookId)
-    }
-
-    // Получение глав для книги (только метаданные)
-    fun getChaptersForBook(bookId: Long): Flow<List<ChapterEntity>> {
-        return chapterDao.getChaptersByBookId(bookId)
-    }
-
-    suspend fun getReadingProgressForBook(bookId: Long): Float {
-        return withContext(Dispatchers.IO) {
-            try {
-                val progress = readingProgressDao.getReadingProgress(bookId)
-                    .firstOrNull()
-                progress?.progressPercent ?: 0f
-            } catch (e: Exception) {
-                0f
-            }
-        }
-    }
-
-    // Метод для обновления прогресса при чтении
-    @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun updateBookReadingProgress(bookId: Long, currentChapter: Int, progressPercent: Float) {
-        withContext(Dispatchers.IO) {
-            try {
-                // Обновляем в таблице чтения
-                readingProgressDao.updateProgress(
-                    bookId = bookId,
-                    chapter = currentChapter,
-                    progress = progressPercent,
-                    timestamp = java.time.LocalDateTime.now()
-                )
-
-                // Также обновляем в таблице книг для быстрого доступа
-                bookDao.getBookById(bookId)?.let { book ->
-                    val newProgress = (progressPercent * 100).toInt()
-                    bookDao.updateReadingProgress(bookId, currentChapter, newProgress)
-                }
-            } catch (e: Exception) {
-                Log.e("BookRepository", "Ошибка обновления прогресса: ${e.message}")
-            }
-        }
     }
 
     // Предзагрузка глав для быстрой навигации
@@ -500,7 +366,6 @@ class BookRepository @Inject constructor(
 
                 Pair(processedContent, imageUrls)
             } catch (e: Exception) {
-                Log.e("BookRepository", "Ошибка загрузки контента с изображениями: ${e.message}")
                 // Fallback: возвращаем обычный контент
                 val content = getChapterContent(bookId, chapterNumber)
                 Pair(content, emptyList())

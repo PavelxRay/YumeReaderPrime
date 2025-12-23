@@ -53,5 +53,4 @@ data class EpubMetadata(
     val publishedDate: String? = null,
     val isbn: String? = null,
     val totalPages: Int = 0
-    // Убрали genres и publisherName из параметров
 )

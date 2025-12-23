@@ -21,17 +21,4 @@ class ReadingProgressRepository @Inject constructor(
     suspend fun saveReadingProgress(progress: ReadingProgress) {
         readingProgressDao.insertReadingProgress(progress)
     }
-
-    suspend fun updateProgress(bookId: Long, chapter: Int, progress: Float) {
-        readingProgressDao.updateProgress(
-            bookId = bookId,
-            chapter = chapter,
-            progress = progress,
-            timestamp = LocalDateTime.now()
-        )
-    }
-
-    suspend fun deleteProgress(bookId: Long) {
-        readingProgressDao.deleteReadingProgress(bookId)
-    }
 }

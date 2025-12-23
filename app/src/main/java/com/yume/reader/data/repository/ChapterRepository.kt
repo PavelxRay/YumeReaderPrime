@@ -18,15 +18,6 @@ class ChapterRepository @Inject constructor(
     suspend fun getChapter(bookId: Long, chapterNumber: Int): ChapterEntity? =
         chapterDao.getChapter(bookId, chapterNumber)
 
-    suspend fun getTotalChaptersCount(bookId: Long): Int =
-        chapterDao.getTotalChaptersCount(bookId)
-
-    suspend fun getReadChaptersCount(bookId: Long): Int =
-        chapterDao.getReadChaptersCount(bookId)
-
-    suspend fun insertChapter(chapter: ChapterEntity): Long =
-        chapterDao.insertChapter(chapter)
-
     suspend fun updateReadStatus(chapterId: Long, isRead: Boolean) {
         chapterDao.updateReadStatus(chapterId, isRead)
     }

@@ -96,17 +96,6 @@ class BookDetailsViewModel @Inject constructor(
         }
     }
 
-    // Переключение статуса "Читаю сейчас"
-    fun toggleReadingStatus() {
-        _bookId.value?.let { bookId ->
-            viewModelScope.launch {
-                book.value?.let { book ->
-                    bookRepository.toggleReadingStatus(bookId, !book.isReading)
-                }
-            }
-        }
-    }
-
     // Получение общего времени чтения книги
     fun getTotalReadingTime(): String {
         val totalMinutes = chapters.value.sumOf { it.durationMinutes }
@@ -131,8 +120,6 @@ class BookDetailsViewModel @Inject constructor(
                     chapter.title.contains(query, ignoreCase = true)
                 }
             }
-
-            // ИЗМЕНЕНО: Применяем фильтр с правильными названиями
             result = when (filter) {
                 "Прочитанно" -> result.filter { it.isRead }
                 "Непрочитанно" -> result.filter { !it.isRead }
@@ -161,21 +148,4 @@ class BookDetailsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = 1
     )
-
-    // Проверка доступности главы в кеше
-    suspend fun isChapterCached(chapterNumber: Int): Boolean {
-        return _bookId.value?.let { bookId ->
-            bookRepository.isChapterCached(bookId, chapterNumber)
-        } ?: false
-    }
-
-    // Получение информации о кешированных главах
-    suspend fun getCachedChaptersInfo(): Map<Int, Boolean> {
-        return _bookId.value?.let { bookId ->
-            val cached = bookRepository.getCachedChapters(bookId)
-            chapters.value.associate { chapter ->
-                chapter.chapterNumber to cached.contains(chapter.chapterNumber)
-            }
-        } ?: emptyMap()
-    }
 }

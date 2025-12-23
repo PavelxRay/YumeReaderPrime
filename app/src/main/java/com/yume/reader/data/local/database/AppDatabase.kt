@@ -24,7 +24,7 @@ import com.yume.reader.data.models.TextSettings
         TextSettings::class,
         ReadingProgress::class
     ],
-    version = 6,  // Увеличиваем версию до 6
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(DateConverter::class, LocalDateTimeConverter::class)
@@ -42,7 +42,6 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                Log.d("AppDatabase", "Запрос на получение базы данных (v6)")
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
@@ -50,7 +49,6 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .fallbackToDestructiveMigration()
                     .build()
-                Log.d("AppDatabase", "Создан новый экземпляр базы (v6)")
                 INSTANCE = instance
                 instance
             }
